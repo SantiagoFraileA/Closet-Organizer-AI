@@ -1,10 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +22,7 @@ import { useColors } from "@/hooks/useColors";
 import { api } from "@/utils/api";
 
 type StyleType = "casual" | "formal" | "streetwear" | "sport" | "bohemian" | "minimalist";
+type ZoneKey = "top" | "upper-middle" | "lower-middle" | "bottom" | "full";
 
 interface DetectedItem {
   name: string;
@@ -28,8 +32,17 @@ interface DetectedItem {
   style: StyleType;
   tags: string[];
   confirmed: boolean;
-  imageThumb: string | null; // base64 JPEG crop from server
+  imageThumb: string | null;
 }
+
+// Vertical zones — fractions of image height (yMin, yMax)
+const ZONES: { key: ZoneKey; label: string; icon: string; yMin: number; yMax: number }[] = [
+  { key: "top", label: "Head / Neck", icon: "arrow-up", yMin: 0, yMax: 0.42 },
+  { key: "upper-middle", label: "Torso / Jacket", icon: "wind", yMin: 0.18, yMax: 0.62 },
+  { key: "lower-middle", label: "Waist / Pants", icon: "align-justify", yMin: 0.44, yMax: 0.82 },
+  { key: "bottom", label: "Shoes / Feet", icon: "arrow-down", yMin: 0.68, yMax: 1.0 },
+  { key: "full", label: "Full / Accessories", icon: "maximize", yMin: 0, yMax: 1.0 },
+];
 
 const CATEGORIES: Array<{ key: ClothingCategory; label: string }> = [
   { key: "tops", label: "Top" },
@@ -87,14 +100,223 @@ function makeId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+// ─── Crop picker modal ────────────────────────────────────────────────────────
+
+function CropPickerModal({
+  visible,
+  imageUri,
+  onClose,
+  onApply,
+}: {
+  visible: boolean;
+  imageUri: string;
+  onClose: () => void;
+  onApply: (thumb: string) => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [selectedZone, setSelectedZone] = useState<ZoneKey>("full");
+  const [cropping, setCropping] = useState(false);
+  const [previewThumb, setPreviewThumb] = useState<string | null>(null);
+
+  const screenW = Dimensions.get("window").width;
+  const previewH = Math.min(300, screenW * 0.75);
+
+  async function buildPreview(zone: ZoneKey) {
+    if (Platform.OS === "web" || !imageUri) return;
+    try {
+      const z = ZONES.find((z) => z.key === zone)!;
+      const img = await ImageManipulator.manipulateAsync(imageUri, [], {});
+      const W = img.width;
+      const H = img.height;
+      const hPad = Math.round(W * 0.04);
+      const originX = hPad;
+      const originY = Math.round(H * z.yMin);
+      const width = Math.max(1, W - hPad * 2);
+      const height = Math.max(1, Math.round(H * (z.yMax - z.yMin)));
+
+      const result = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [
+          { crop: { originX, originY, width, height } },
+          { resize: { width: 400 } },
+        ],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      setPreviewThumb(result.base64 ?? null);
+    } catch {
+      setPreviewThumb(null);
+    }
+  }
+
+  function selectZone(zone: ZoneKey) {
+    setSelectedZone(zone);
+    setPreviewThumb(null);
+    buildPreview(zone);
+    Haptics.selectionAsync();
+  }
+
+  async function apply() {
+    if (Platform.OS === "web" || !imageUri) { onClose(); return; }
+    setCropping(true);
+    try {
+      const z = ZONES.find((z) => z.key === selectedZone)!;
+      const img = await ImageManipulator.manipulateAsync(imageUri, [], {});
+      const W = img.width;
+      const H = img.height;
+      const hPad = Math.round(W * 0.04);
+      const originX = hPad;
+      const originY = Math.round(H * z.yMin);
+      const width = Math.max(1, W - hPad * 2);
+      const height = Math.max(1, Math.round(H * (z.yMax - z.yMin)));
+
+      const result = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [
+          { crop: { originX, originY, width, height } },
+          { resize: { width: 200, height: 200 } },
+        ],
+        { compress: 0.3, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      if (result.base64) {
+        onApply(result.base64);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setCropping(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={[cropStyles.overlay]}>
+        <View
+          style={[
+            cropStyles.sheet,
+            {
+              backgroundColor: colors.background,
+              paddingBottom: insets.bottom + 16,
+            },
+          ]}
+        >
+          {/* Handle */}
+          <View style={[cropStyles.handle, { backgroundColor: colors.border }]} />
+
+          <Text style={[cropStyles.title, { color: colors.foreground }]}>
+            Choose crop zone
+          </Text>
+          <Text style={[cropStyles.subtitle, { color: colors.mutedForeground }]}>
+            Select the area of the outfit photo to save for this item
+          </Text>
+
+          {/* Full image reference */}
+          <Image
+            source={{ uri: imageUri }}
+            style={[cropStyles.fullImage, { borderColor: colors.border }]}
+            resizeMode="cover"
+          />
+
+          {/* Zone buttons */}
+          <View style={cropStyles.zoneList}>
+            {ZONES.map((z) => {
+              const active = selectedZone === z.key;
+              return (
+                <Pressable
+                  key={z.key}
+                  onPress={() => selectZone(z.key)}
+                  style={[
+                    cropStyles.zoneBtn,
+                    {
+                      backgroundColor: active ? colors.foreground : colors.secondary,
+                      borderRadius: 12,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={z.icon as any}
+                    size={14}
+                    color={active ? colors.primaryForeground : colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      cropStyles.zoneBtnText,
+                      { color: active ? colors.primaryForeground : colors.mutedForeground },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {z.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Preview of selected crop */}
+          <View style={[cropStyles.previewBox, { borderColor: colors.border, backgroundColor: colors.secondary }]}>
+            {previewThumb ? (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${previewThumb}` }}
+                style={cropStyles.previewImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={cropStyles.previewPlaceholder}>
+                <Feather name="crop" size={22} color={colors.mutedForeground} />
+                <Text style={[cropStyles.previewHint, { color: colors.mutedForeground }]}>
+                  {Platform.OS === "web" ? "Preview on device" : "Select a zone to preview"}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Actions */}
+          <View style={cropStyles.actions}>
+            <Pressable
+              onPress={onClose}
+              style={[cropStyles.cancelBtn, { backgroundColor: colors.secondary, borderRadius: 12 }]}
+            >
+              <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 15 }}>
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={apply}
+              disabled={cropping}
+              style={[cropStyles.applyBtn, { backgroundColor: colors.accent, borderRadius: 12, flex: 1 }]}
+            >
+              {cropping ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Feather name="check" size={16} color="#fff" />
+                  <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 15 }}>
+                    Apply crop
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Item card ────────────────────────────────────────────────────────────────
+
 function ItemCard({
   item,
   index,
   onChange,
+  onEditCrop,
 }: {
   item: DetectedItem;
   index: number;
   onChange: (idx: number, patch: Partial<DetectedItem>) => void;
+  onEditCrop: (idx: number) => void;
 }) {
   const colors = useColors();
   const [expanded, setExpanded] = useState(true);
@@ -114,20 +336,25 @@ function ItemCard({
       {/* Header */}
       <Pressable onPress={() => setExpanded((e) => !e)} style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
-          {/* Thumbnail crop or color dot */}
-          {item.imageThumb ? (
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${item.imageThumb}` }}
-              style={[styles.thumbImage, { borderRadius: 10, borderColor: colors.border }]}
-            />
-          ) : (
-            <View
-              style={[
-                styles.colorDot,
-                { backgroundColor: item.colorHex, borderColor: colors.border },
-              ]}
-            />
-          )}
+          {/* Thumbnail + edit button */}
+          <View>
+            {item.imageThumb ? (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${item.imageThumb}` }}
+                style={[styles.thumbImage, { borderColor: colors.border }]}
+              />
+            ) : (
+              <View style={[styles.colorDot, { backgroundColor: item.colorHex, borderColor: colors.border }]} />
+            )}
+            <Pressable
+              onPress={(e) => { e.stopPropagation(); onEditCrop(index); }}
+              style={[styles.editCropBtn, { backgroundColor: colors.foreground }]}
+              hitSlop={8}
+            >
+              <Feather name="crop" size={10} color={colors.primaryForeground} />
+            </Pressable>
+          </View>
+
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>
               {item.name}
@@ -138,9 +365,7 @@ function ItemCard({
           </View>
         </View>
         <View style={styles.cardHeaderRight}>
-          {item.confirmed && (
-            <Feather name="check-circle" size={18} color={colors.accent} />
-          )}
+          {item.confirmed && <Feather name="check-circle" size={18} color={colors.accent} />}
           <Feather
             name={expanded ? "chevron-up" : "chevron-down"}
             size={18}
@@ -245,37 +470,36 @@ function ItemCard({
             <Text style={[styles.colorName, { color: colors.mutedForeground }]}>{item.color}</Text>
           </View>
 
-          {/* Confirm button */}
-          <View style={styles.cardActions}>
-            <Pressable
-              onPress={() => {
-                onChange(index, { confirmed: !item.confirmed });
-                Haptics.notificationAsync(
-                  item.confirmed
-                    ? Haptics.NotificationFeedbackType.Warning
-                    : Haptics.NotificationFeedbackType.Success
-                );
-              }}
-              style={[
-                styles.confirmBtn,
-                {
-                  backgroundColor: item.confirmed ? colors.accent : colors.foreground,
-                  borderRadius: 12,
-                  flex: 1,
-                },
-              ]}
-            >
-              <Feather name={item.confirmed ? "check" : "plus"} size={16} color="#FFFFFF" />
-              <Text style={styles.confirmBtnText}>
-                {item.confirmed ? "Confirmed" : "Add to Closet"}
-              </Text>
-            </Pressable>
-          </View>
+          {/* Confirm */}
+          <Pressable
+            onPress={() => {
+              onChange(index, { confirmed: !item.confirmed });
+              Haptics.notificationAsync(
+                item.confirmed
+                  ? Haptics.NotificationFeedbackType.Warning
+                  : Haptics.NotificationFeedbackType.Success
+              );
+            }}
+            style={[
+              styles.confirmBtn,
+              {
+                backgroundColor: item.confirmed ? colors.accent : colors.foreground,
+                borderRadius: 12,
+              },
+            ]}
+          >
+            <Feather name={item.confirmed ? "check" : "plus"} size={16} color="#FFFFFF" />
+            <Text style={styles.confirmBtnText}>
+              {item.confirmed ? "Confirmed" : "Add to Closet"}
+            </Text>
+          </Pressable>
         </View>
       )}
     </View>
   );
 }
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function AnalyzeScreen() {
   const colors = useColors();
@@ -288,12 +512,11 @@ export default function AnalyzeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DetectedItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
-  useEffect(() => {
-    analyzeImage();
-  }, []);
+  useEffect(() => { analyzeImage(); }, []);
 
   async function analyzeImage() {
     try {
@@ -310,7 +533,6 @@ export default function AnalyzeScreen() {
       });
 
       const json = await res.json();
-
       if (!res.ok) {
         setError(json.message ?? json.error ?? "Error analyzing the image");
         return;
@@ -319,22 +541,20 @@ export default function AnalyzeScreen() {
       const detected: DetectedItem[] = (json.items ?? []).map((item: any) => ({
         name: item.name ?? "Clothing item",
         category: (["tops", "bottoms", "shoes", "accessories"].includes(item.category)
-          ? item.category
-          : "tops") as ClothingCategory,
+          ? item.category : "tops") as ClothingCategory,
         color: item.color ?? "Unknown",
         colorHex: /^#[0-9A-Fa-f]{6}$/.test(item.colorHex)
           ? item.colorHex
           : getClosestPreset(item.colorHex ?? "#9E9E9E").hex,
         style: (["casual", "formal", "streetwear", "sport", "bohemian", "minimalist"].includes(item.style)
-          ? item.style
-          : "casual") as StyleType,
+          ? item.style : "casual") as StyleType,
         tags: Array.isArray(item.tags) ? item.tags : [],
         confirmed: true,
-        imageThumb: item.imageThumb ?? null, // individual crop from server
+        imageThumb: item.imageThumb ?? null,
       }));
 
       setItems(detected);
-    } catch (err: any) {
+    } catch {
       setError("Connection error. Make sure the server is running.");
     } finally {
       setLoading(false);
@@ -343,6 +563,12 @@ export default function AnalyzeScreen() {
 
   function updateItem(idx: number, patch: Partial<DetectedItem>) {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
+  }
+
+  function applyCrop(thumb: string) {
+    if (editingIndex === null) return;
+    updateItem(editingIndex, { imageThumb: thumb });
+    setEditingIndex(null);
   }
 
   async function saveConfirmed() {
@@ -354,7 +580,6 @@ export default function AnalyzeScreen() {
 
     const itemsWithIds = toSave.map((item) => ({ ...item, id: makeId() }));
 
-    // 1. Save locally (instant, offline-first)
     for (const item of itemsWithIds) {
       addItem({
         imageUri: params.imageUri ?? null,
@@ -367,7 +592,6 @@ export default function AnalyzeScreen() {
       });
     }
 
-    // 2. Persist to DB in background
     api
       .saveItems(
         itemsWithIds.map((item) => ({
@@ -389,21 +613,24 @@ export default function AnalyzeScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      {/* Crop picker modal */}
+      {editingIndex !== null && (
+        <CropPickerModal
+          visible
+          imageUri={params.imageUri}
+          onClose={() => setEditingIndex(null)}
+          onApply={applyCrop}
+        />
+      )}
+
       {/* Header */}
       <View
         style={[
           styles.header,
-          {
-            paddingTop: topPad + 8,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.background,
-          },
+          { paddingTop: topPad + 8, borderBottomColor: colors.border, backgroundColor: colors.background },
         ]}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-        >
+        <Pressable onPress={() => router.back()} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <View style={styles.headerCenter}>
@@ -414,10 +641,7 @@ export default function AnalyzeScreen() {
             </Text>
           )}
         </View>
-        <Pressable
-          onPress={analyzeImage}
-          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-        >
+        <Pressable onPress={analyzeImage} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
           <Feather name="refresh-cw" size={18} color={colors.mutedForeground} />
         </Pressable>
       </View>
@@ -426,9 +650,7 @@ export default function AnalyzeScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-            Analyzing your outfit...
-          </Text>
+          <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Analyzing your outfit...</Text>
           <Text style={[styles.loadingHint, { color: colors.mutedForeground }]}>
             AI is identifying and cropping each garment
           </Text>
@@ -441,9 +663,7 @@ export default function AnalyzeScreen() {
             onPress={analyzeImage}
             style={[styles.retryBtn, { backgroundColor: colors.foreground, borderRadius: 12 }]}
           >
-            <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }}>
-              Try again
-            </Text>
+            <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }}>Try again</Text>
           </Pressable>
         </View>
       ) : items.length === 0 ? (
@@ -457,9 +677,7 @@ export default function AnalyzeScreen() {
             onPress={() => router.back()}
             style={[styles.retryBtn, { backgroundColor: colors.secondary, borderRadius: 12 }]}
           >
-            <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
-              Go back
-            </Text>
+            <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>Go back</Text>
           </Pressable>
         </View>
       ) : (
@@ -472,10 +690,16 @@ export default function AnalyzeScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={[styles.listHint, { color: colors.mutedForeground }]}>
-              Each garment is cropped individually. Edit anything before saving.
+              Tap the crop icon on any thumbnail to adjust it
             </Text>
             {items.map((item, i) => (
-              <ItemCard key={i} item={item} index={i} onChange={updateItem} />
+              <ItemCard
+                key={i}
+                item={item}
+                index={i}
+                onChange={updateItem}
+                onEditCrop={setEditingIndex}
+              />
             ))}
           </ScrollView>
 
@@ -529,6 +753,8 @@ export default function AnalyzeScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -542,13 +768,7 @@ const styles = StyleSheet.create({
   headerCenter: { alignItems: "center" },
   headerTitle: { fontSize: 17, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingHorizontal: 32,
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
   loadingText: { fontSize: 17, fontFamily: "Inter_600SemiBold", marginTop: 8 },
   loadingHint: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
   errorText: { fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
@@ -564,12 +784,18 @@ const styles = StyleSheet.create({
   },
   cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   cardHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  thumbImage: {
-    width: 48,
-    height: 48,
-    borderWidth: 1,
+  thumbImage: { width: 52, height: 52, borderRadius: 10, borderWidth: 1 },
+  colorDot: { width: 52, height: 52, borderRadius: 26, borderWidth: 1 },
+  editCropBtn: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  colorDot: { width: 48, height: 48, borderRadius: 24, borderWidth: 1 },
   cardName: { fontSize: 15, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   cardMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   cardBody: { borderTopWidth: 1, padding: 16, gap: 16 },
@@ -582,7 +808,6 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   swatch: { width: 32, height: 32 },
   colorName: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  cardActions: { flexDirection: "row", gap: 10 },
   confirmBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -608,4 +833,101 @@ const styles = StyleSheet.create({
     height: 56,
   },
   saveBtnText: { fontSize: 16, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+});
+
+const cropStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 14,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    marginTop: -6,
+  },
+  fullImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  zoneList: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  zoneBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 4,
+    minHeight: 60,
+  },
+  zoneBtnText: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    lineHeight: 13,
+  },
+  previewBox: {
+    width: "100%",
+    height: 130,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  previewPlaceholder: {
+    alignItems: "center",
+    gap: 8,
+  },
+  previewHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  cancelBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  applyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+  },
 });
