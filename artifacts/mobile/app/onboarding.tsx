@@ -3,8 +3,11 @@ import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Animated,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -38,15 +41,114 @@ const STEPS = [
   },
 ];
 
-function GoogleIcon() {
-  return (
-    <Text style={{ fontSize: 18, lineHeight: 22 }}>G</Text>
-  );
-}
+const GENDER_OPTIONS = [
+  "Man",
+  "Woman",
+  "Non-binary",
+  "Genderfluid",
+  "Agender",
+  "Prefer not to say",
+];
 
-function AppleIcon({ color }: { color: string }) {
+function GenderPicker({
+  value,
+  onSelect,
+  colors,
+}: {
+  value: string;
+  onSelect: (v: string) => void;
+  colors: ReturnType<typeof import("@/hooks/useColors").useColors>;
+}) {
+  const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+
   return (
-    <Text style={{ fontSize: 18, lineHeight: 22, color }}>🍎</Text>
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={[
+          styles.input,
+          styles.pickerBtn,
+          {
+            backgroundColor: colors.card,
+            borderColor: value ? colors.foreground : colors.border,
+            borderRadius: colors.radius,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.pickerBtnText,
+            { color: value ? colors.foreground : colors.mutedForeground },
+          ]}
+        >
+          {value || "Gender"}
+        </Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>▼</Text>
+      </Pressable>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: colors.card,
+                paddingBottom: (Platform.OS === "web" ? 24 : insets.bottom) + 16,
+              },
+            ]}
+          >
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+              Select Gender
+            </Text>
+            {GENDER_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onSelect(opt);
+                  setOpen(false);
+                }}
+                style={({ pressed }) => [
+                  styles.modalOption,
+                  {
+                    backgroundColor:
+                      opt === value
+                        ? colors.foreground + "0F"
+                        : pressed
+                        ? colors.secondary
+                        : "transparent",
+                    borderRadius: colors.radius,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    {
+                      color: colors.foreground,
+                      fontFamily:
+                        opt === value ? "Inter_600SemiBold" : "Inter_400Regular",
+                    },
+                  ]}
+                >
+                  {opt}
+                </Text>
+                {opt === value && (
+                  <Text style={{ color: colors.accent, fontSize: 18 }}>✓</Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -55,18 +157,23 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { completeOnboarding } = useCloset();
+
   const [step, setStep] = useState(0);
   const [showEmailForm, setShowEmailForm] = useState(false);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const isAuthStep = step === STEPS.length;
   const totalDots = STEPS.length + 1;
-
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
-
   const currentStep = STEPS[step];
 
   const animate = (cb: () => void) => {
@@ -84,162 +191,262 @@ export default function OnboardingScreen() {
     }
   };
 
-  const handleSocialAuth = (provider: "google" | "apple") => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    completeOnboarding("User");
-    router.replace("/(tabs)");
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = "Required";
+    if (!lastName.trim()) errs.lastName = "Required";
+    if (!email.trim() || !email.includes("@")) errs.email = "Enter a valid email";
+    if (!age.trim() || isNaN(Number(age)) || Number(age) < 13 || Number(age) > 120)
+      errs.age = "Enter a valid age (13+)";
+    if (!gender) errs.gender = "Please select a gender";
+    return errs;
   };
 
-  const handleEmailAuth = () => {
-    if (!showEmailForm) {
-      setShowEmailForm(true);
+  const handleCreateAccount = () => {
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
-    if (!email.trim()) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    completeOnboarding(name.trim() || email.split("@")[0] || "Stylist");
+    completeOnboarding({ firstName, lastName, email, age, gender });
     router.replace("/(tabs)");
   };
 
   const handleSignIn = () => {
     Haptics.selectionAsync();
-    completeOnboarding("User");
+    completeOnboarding({
+      firstName: "User",
+      lastName: "",
+      email: "",
+      age: "",
+      gender: "",
+    });
     router.replace("/(tabs)");
   };
 
   const accentColor = currentStep?.accent ?? colors.accent;
 
-  return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: colors.background, paddingTop: topPad + 16 },
-      ]}
-    >
-      {/* Progress dots */}
-      <View style={styles.dotsRow}>
-        {Array.from({ length: totalDots }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                backgroundColor: i <= step ? colors.foreground : colors.border,
-                width: i === step ? 28 : 8,
-              },
-            ]}
-          />
-        ))}
-      </View>
+  const inputStyle = (field: string) => [
+    styles.input,
+    {
+      backgroundColor: colors.card,
+      borderColor: errors[field] ? colors.destructive : colors.border,
+      color: colors.foreground,
+      borderRadius: colors.radius,
+    },
+  ];
 
-      {/* Content area */}
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        {!isAuthStep ? (
-          <>
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.background, paddingTop: topPad + 16 },
+        ]}
+      >
+        {/* Progress dots */}
+        <View style={styles.dotsRow}>
+          {Array.from({ length: totalDots }).map((_, i) => (
             <View
+              key={i}
               style={[
-                styles.illustration,
+                styles.dot,
                 {
-                  backgroundColor: accentColor + "18",
-                  borderRadius: colors.radius * 2,
+                  backgroundColor: i <= step ? colors.foreground : colors.border,
+                  width: i === step ? 28 : 8,
                 },
               ]}
-            >
+            />
+          ))}
+        </View>
+
+        {/* Content */}
+        <Animated.View style={[{ opacity: fadeAnim }, styles.contentWrap]}>
+          {!isAuthStep ? (
+            <View style={styles.slideContent}>
               <View
                 style={[
-                  styles.innerCircle,
+                  styles.illustration,
                   {
-                    backgroundColor: accentColor + "35",
-                    borderRadius: 88,
+                    backgroundColor: accentColor + "18",
+                    borderRadius: colors.radius * 2,
                   },
                 ]}
               >
-                <Text style={styles.stepIcon}>{currentStep.icon}</Text>
-              </View>
-            </View>
-
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              {currentStep.title}
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              {currentStep.subtitle}
-            </Text>
-          </>
-        ) : (
-          /* Auth step */
-          <View style={styles.authContent}>
-            <Text style={[styles.authTitle, { color: colors.foreground }]}>
-              {"Let's get\nstarted."}
-            </Text>
-            <Text style={[styles.authSubtitle, { color: colors.mutedForeground }]}>
-              Create your account to save your wardrobe across devices.
-            </Text>
-
-            {showEmailForm ? (
-              <View style={styles.emailForm}>
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Your name"
-                  placeholderTextColor={colors.mutedForeground}
+                <View
                   style={[
-                    styles.input,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.foreground,
-                      borderRadius: colors.radius,
-                    },
+                    styles.innerCircle,
+                    { backgroundColor: accentColor + "35", borderRadius: 88 },
                   ]}
-                  autoFocus
-                  returnKeyType="next"
-                />
+                >
+                  <Text style={styles.stepIcon}>{currentStep.icon}</Text>
+                </View>
+              </View>
+              <Text style={[styles.title, { color: colors.foreground }]}>
+                {currentStep.title}
+              </Text>
+              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+                {currentStep.subtitle}
+              </Text>
+            </View>
+          ) : showEmailForm ? (
+            /* ── Email registration form ── */
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.formScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[styles.formTitle, { color: colors.foreground }]}>
+                Create account
+              </Text>
+              <Text style={[styles.formSubtitle, { color: colors.mutedForeground }]}>
+                Tell us a bit about yourself.
+              </Text>
+
+              {/* Row: first + last name */}
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    value={firstName}
+                    onChangeText={(v) => {
+                      setFirstName(v);
+                      setErrors((e) => ({ ...e, firstName: "" }));
+                    }}
+                    placeholder="First name"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={inputStyle("firstName")}
+                    autoFocus
+                    returnKeyType="next"
+                  />
+                  {errors.firstName ? (
+                    <Text style={[styles.errorText, { color: colors.destructive }]}>
+                      {errors.firstName}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    value={lastName}
+                    onChangeText={(v) => {
+                      setLastName(v);
+                      setErrors((e) => ({ ...e, lastName: "" }));
+                    }}
+                    placeholder="Last name"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={inputStyle("lastName")}
+                    returnKeyType="next"
+                  />
+                  {errors.lastName ? (
+                    <Text style={[styles.errorText, { color: colors.destructive }]}>
+                      {errors.lastName}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Email */}
+              <View>
                 <TextInput
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    setErrors((e) => ({ ...e, email: "" }));
+                  }}
                   placeholder="Email address"
                   placeholderTextColor={colors.mutedForeground}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.foreground,
-                      borderRadius: colors.radius,
-                    },
-                  ]}
+                  style={inputStyle("email")}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  returnKeyType="done"
-                  onSubmitEditing={handleEmailAuth}
+                  returnKeyType="next"
                 />
-                <Pressable
-                  onPress={handleEmailAuth}
-                  style={({ pressed }) => [
-                    styles.authBtn,
-                    {
-                      backgroundColor: colors.foreground,
-                      borderRadius: colors.radius,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: pressed ? 0.97 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={[styles.authBtnText, { color: colors.primaryForeground }]}>
-                    Create account
+                {errors.email ? (
+                  <Text style={[styles.errorText, { color: colors.destructive }]}>
+                    {errors.email}
                   </Text>
-                </Pressable>
-                <Pressable onPress={() => setShowEmailForm(false)} style={styles.backLink}>
-                  <Text style={[styles.backLinkText, { color: colors.mutedForeground }]}>
-                    ← Back
-                  </Text>
-                </Pressable>
+                ) : null}
               </View>
-            ) : (
+
+              {/* Row: age + gender */}
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    value={age}
+                    onChangeText={(v) => {
+                      setAge(v.replace(/[^0-9]/g, ""));
+                      setErrors((e) => ({ ...e, age: "" }));
+                    }}
+                    placeholder="Age"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={inputStyle("age")}
+                    keyboardType="number-pad"
+                    maxLength={3}
+                    returnKeyType="done"
+                  />
+                  {errors.age ? (
+                    <Text style={[styles.errorText, { color: colors.destructive }]}>
+                      {errors.age}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1.4 }}>
+                  <GenderPicker
+                    value={gender}
+                    onSelect={(v) => {
+                      setGender(v);
+                      setErrors((e) => ({ ...e, gender: "" }));
+                    }}
+                    colors={colors}
+                  />
+                  {errors.gender ? (
+                    <Text style={[styles.errorText, { color: colors.destructive }]}>
+                      {errors.gender}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Submit */}
+              <Pressable
+                onPress={handleCreateAccount}
+                style={({ pressed }) => [
+                  styles.authBtn,
+                  {
+                    backgroundColor: colors.foreground,
+                    borderRadius: colors.radius,
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <Text style={[styles.authBtnText, { color: colors.primaryForeground }]}>
+                  Create account
+                </Text>
+              </Pressable>
+
+              <Pressable onPress={() => setShowEmailForm(false)} style={styles.backLink}>
+                <Text style={[styles.backLinkText, { color: colors.mutedForeground }]}>
+                  ← Back
+                </Text>
+              </Pressable>
+            </ScrollView>
+          ) : (
+            /* ── Auth options ── */
+            <View style={styles.authContent}>
+              <Text style={[styles.authTitle, { color: colors.foreground }]}>
+                {"Let's get\nstarted."}
+              </Text>
+              <Text style={[styles.authSubtitle, { color: colors.mutedForeground }]}>
+                Create your account to save your wardrobe across devices.
+              </Text>
+
               <View style={styles.authButtons}>
-                {/* Google */}
                 <Pressable
-                  onPress={() => handleSocialAuth("google")}
                   style={({ pressed }) => [
                     styles.socialBtn,
                     {
@@ -251,88 +458,90 @@ export default function OnboardingScreen() {
                     },
                   ]}
                 >
-                  <Text style={styles.socialIcon}>G</Text>
-                  <Text style={[styles.socialBtnText, { color: colors.foreground }]}>
+                  <Text style={[styles.socialIcon, { color: colors.mutedForeground }]}>G</Text>
+                  <Text style={[styles.socialBtnText, { color: colors.mutedForeground }]}>
                     Continue with Google
                   </Text>
+                  <View style={styles.comingSoonBadge}>
+                    <Text style={styles.comingSoonText}>Soon</Text>
+                  </View>
                 </Pressable>
 
-                {/* Apple */}
                 <Pressable
-                  onPress={() => handleSocialAuth("apple")}
                   style={({ pressed }) => [
                     styles.socialBtn,
                     {
-                      backgroundColor: colors.foreground,
-                      borderColor: colors.foreground,
+                      backgroundColor: colors.secondary,
+                      borderColor: colors.border,
                       borderRadius: colors.radius,
                       opacity: pressed ? 0.8 : 1,
                       transform: [{ scale: pressed ? 0.97 : 1 }],
                     },
                   ]}
                 >
-                  <Text style={[styles.socialIcon, { color: colors.primaryForeground }]}>
+                  <Text style={[styles.socialIcon, { color: colors.mutedForeground }]}>
                     
                   </Text>
-                  <Text style={[styles.socialBtnText, { color: colors.primaryForeground }]}>
+                  <Text style={[styles.socialBtnText, { color: colors.mutedForeground }]}>
                     Continue with Apple
                   </Text>
+                  <View style={styles.comingSoonBadge}>
+                    <Text style={styles.comingSoonText}>Soon</Text>
+                  </View>
                 </Pressable>
 
-                {/* Divider */}
                 <View style={styles.dividerRow}>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                   <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>or</Text>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                 </View>
 
-                {/* Email */}
                 <Pressable
-                  onPress={handleEmailAuth}
+                  onPress={() => setShowEmailForm(true)}
                   style={({ pressed }) => [
                     styles.socialBtn,
                     {
-                      backgroundColor: "transparent",
-                      borderColor: colors.border,
+                      backgroundColor: colors.foreground,
+                      borderColor: colors.foreground,
                       borderRadius: colors.radius,
-                      opacity: pressed ? 0.8 : 1,
+                      opacity: pressed ? 0.85 : 1,
                       transform: [{ scale: pressed ? 0.97 : 1 }],
                     },
                   ]}
                 >
-                  <Text style={[styles.socialIcon, { color: colors.foreground }]}>✉</Text>
-                  <Text style={[styles.socialBtnText, { color: colors.foreground }]}>
+                  <Text style={[styles.socialIcon, { color: colors.primaryForeground }]}>✉</Text>
+                  <Text style={[styles.socialBtnText, { color: colors.primaryForeground }]}>
                     Sign up with Email
                   </Text>
                 </Pressable>
               </View>
-            )}
+            </View>
+          )}
+        </Animated.View>
+
+        {/* Bottom */}
+        {!isAuthStep && (
+          <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
+            <Pressable
+              onPress={goNext}
+              style={({ pressed }) => [
+                styles.nextBtn,
+                {
+                  backgroundColor: colors.foreground,
+                  borderRadius: colors.radius,
+                  opacity: pressed ? 0.85 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text style={[styles.nextText, { color: colors.primaryForeground }]}>
+                {step === STEPS.length - 1 ? "Let's begin" : "Continue"}
+              </Text>
+            </Pressable>
           </View>
         )}
-      </Animated.View>
 
-      {/* Bottom area */}
-      {!isAuthStep ? (
-        <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
-          <Pressable
-            onPress={goNext}
-            style={({ pressed }) => [
-              styles.nextBtn,
-              {
-                backgroundColor: colors.foreground,
-                borderRadius: colors.radius,
-                opacity: pressed ? 0.85 : 1,
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              },
-            ]}
-          >
-            <Text style={[styles.nextText, { color: colors.primaryForeground }]}>
-              {step === STEPS.length - 1 ? "Let's begin" : "Continue"}
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        !showEmailForm && (
+        {isAuthStep && !showEmailForm && (
           <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
             <Pressable onPress={handleSignIn} style={styles.signInLink}>
               <Text style={[styles.signInText, { color: colors.mutedForeground }]}>
@@ -343,31 +552,29 @@ export default function OnboardingScreen() {
               </Text>
             </Pressable>
           </View>
-        )
-      )}
-    </View>
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   dotsRow: {
     flexDirection: "row",
     gap: 6,
     paddingHorizontal: 28,
-    marginBottom: 32,
+    marginBottom: 28,
   },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  content: {
+  dot: { height: 8, borderRadius: 4 },
+  contentWrap: {
     flex: 1,
     paddingHorizontal: 28,
-    gap: 16,
+  },
+  slideContent: {
+    flex: 1,
     justifyContent: "center",
+    gap: 16,
   },
   illustration: {
     height: 200,
@@ -381,9 +588,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stepIcon: {
-    fontSize: 52,
-  },
+  stepIcon: { fontSize: 52 },
   title: {
     fontSize: 38,
     fontWeight: "700",
@@ -397,6 +602,8 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   authContent: {
+    flex: 1,
+    justifyContent: "center",
     gap: 20,
   },
   authTitle: {
@@ -405,17 +612,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     lineHeight: 46,
     letterSpacing: -0.5,
-    marginBottom: 4,
   },
   authSubtitle: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     lineHeight: 24,
-    marginBottom: 8,
   },
-  authButtons: {
-    gap: 12,
-  },
+  authButtons: { gap: 12 },
   socialBtn: {
     height: 56,
     borderWidth: 1.5,
@@ -435,31 +638,71 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.1,
+    flex: 1,
+  },
+  comingSoonBadge: {
+    backgroundColor: "#E5DDD6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  comingSoonText: {
+    fontSize: 11,
+    color: "#78716C",
+    fontFamily: "Inter_500Medium",
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginVertical: 4,
+    marginVertical: 2,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  emailForm: {
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  formScroll: {
     gap: 12,
+    paddingTop: 4,
+    paddingBottom: 40,
+  },
+  formTitle: {
+    fontSize: 30,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+    marginBottom: 2,
+  },
+  formSubtitle: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: "row",
+    gap: 10,
   },
   input: {
-    height: 56,
-    paddingHorizontal: 16,
+    height: 54,
+    paddingHorizontal: 14,
     fontSize: 16,
     borderWidth: 1.5,
     fontFamily: "Inter_400Regular",
+  },
+  pickerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerBtnText: {
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+  },
+  errorText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 3,
+    marginLeft: 2,
   },
   authBtn: {
     height: 56,
@@ -472,17 +715,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
   },
-  backLink: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  backLinkText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  bottom: {
-    paddingHorizontal: 28,
-  },
+  backLink: { alignItems: "center", paddingVertical: 10 },
+  backLinkText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  bottom: { paddingHorizontal: 28 },
   nextBtn: {
     height: 58,
     alignItems: "center",
@@ -494,13 +729,46 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     letterSpacing: 0.2,
   },
-  signInLink: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
+  signInLink: { alignItems: "center", paddingVertical: 12 },
   signInText: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    gap: 4,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  modalOptionText: {
+    fontSize: 16,
   },
 });
