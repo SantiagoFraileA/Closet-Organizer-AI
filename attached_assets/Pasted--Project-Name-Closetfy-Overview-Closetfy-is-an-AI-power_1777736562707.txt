@@ -1,0 +1,239 @@
+<Project>
+Name: Closetfy
+
+Overview:
+Closetfy is an AI-powered virtual closet Progressive Web App (PWA) that allows users to upload photos of themselves wearing outfits. The system uses AI-based image segmentation and object detection to extract individual clothing items, categorize them, and build a personalized digital wardrobe. Based on this data, the app generates outfit recommendations, including a special “Exit the Comfort Zone” mode that suggests bold, unconventional combinations.
+
+Target Platform:
+
+* Mobile-first Progressive Web App (PWA)
+* Fully responsive design optimized for smartphones
+
+Operating Mode:
+
+* Fully online (cloud-based AI processing required)
+
+Hosting & Infrastructure:
+
+* Cloud provider: AWS or GCP (design architecture to be provider-agnostic)
+* Use scalable storage for images (e.g., S3 / Cloud Storage)
+* Backend should support horizontal scaling
+
+Tech Stack (MANDATORY):
+Frontend:
+
+* React (with Vite or Next.js)
+* TailwindCSS for styling
+* Framer Motion for animations
+
+Backend:
+
+* Python (FastAPI preferred over Flask for scalability)
+* RESTful API architecture
+
+Database:
+
+* PostgreSQL (primary relational DB)
+* Optional: Redis for caching recommendations
+
+Storage:
+
+* Cloud object storage for user-uploaded images
+
+AI / ML Integration:
+
+* Use pre-trained models (do NOT train from scratch)
+* Image segmentation: use an API or library (e.g., Detectron2, YOLO, or external API)
+* Clothing classification: map items into categories (tops, bottoms, shoes, accessories)
+* Style profiling: build a lightweight scoring system based on user interactions
+
+Authentication:
+
+* JWT-based authentication
+* Secure login/register system
+* Password hashing (bcrypt)
+
+Core Features:
+
+1. User Authentication & Profiles
+
+* Register / Login / Logout
+* Profile management
+* Store user preferences and style history
+
+2. Image Upload & Processing
+
+* Users upload outfit photos
+* Backend processes images using AI
+* Extract individual clothing items
+* Store metadata (type, color, style tags)
+
+3. Digital Closet
+
+* Display items in categorized grid:
+
+  * Tops
+  * Bottoms
+  * Shoes
+  * Accessories
+* Include filtering and search functionality
+
+4. Outfit Recommendation Engine
+
+* Generate daily outfit suggestions
+* Use:
+
+  * Color matching logic
+  * Style similarity scoring
+  * Past user likes/dislikes
+
+5. “Exit the Comfort Zone” Mode
+
+* Generate intentionally contrasting outfits
+* Introduce:
+
+  * New color combinations
+  * Different style categories
+* Still maintain basic aesthetic constraints
+
+6. Interactive UI/UX
+
+* Swipe left/right to rate outfits
+* Like / Dislike system
+* Carousel-based outfit browsing
+* Smooth animations (card flips, transitions)
+
+7. Feedback Loop
+
+* Store user ratings
+* Improve recommendations over time
+
+Non-Functional Requirements:
+
+Performance:
+
+* API response time under 500ms (excluding AI processing)
+* Lazy load images
+
+Scalability:
+
+* Design modular backend services
+* Separate AI processing logic
+
+Security:
+
+* Secure file upload handling
+* Validate all inputs
+* Protect endpoints with authentication
+
+Architecture Requirements:
+
+* Use clean folder structure:
+
+Frontend:
+
+* /components
+* /pages
+* /hooks
+* /services
+
+Backend:
+
+* /routes
+
+* /models
+
+* /schemas
+
+* /services
+
+* /ai
+
+* Use environment variables for secrets
+
+* Include .env support
+
+Database Schema (minimum):
+
+Users:
+
+* id
+* email
+* password_hash
+* created_at
+
+ClothingItems:
+
+* id
+* user_id
+* image_url
+* category
+* color
+* tags
+
+Outfits:
+
+* id
+* user_id
+* items (relation)
+* style_score
+
+Ratings:
+
+* id
+* user_id
+* outfit_id
+* rating (like/dislike)
+
+Development Plan (IMPORTANT):
+
+Step 1:
+Initialize full-stack project structure
+
+Step 2:
+Implement authentication system
+
+Step 3:
+Set up database models and connections
+
+Step 4:
+Implement image upload endpoint
+
+Step 5:
+Integrate AI processing pipeline
+
+Step 6:
+Build digital closet UI
+
+Step 7:
+Implement recommendation engine
+
+Step 8:
+Add “Comfort Zone” feature
+
+Step 9:
+Add UI animations and interactions
+
+Step 10:
+Prepare for deployment (Docker optional)
+
+Deployment:
+
+* Ensure app can be deployed on cloud platform
+* Include build scripts
+* Configure production environment variables
+
+Language Preferences:
+
+* Replit Agent interaction: English
+* Application interface: English
+
+Instructions to Agent:
+
+* First generate a full project plan before coding
+* Then implement step-by-step
+* Ensure code is modular and production-ready
+* Avoid placeholder logic unless necessary
+* Clearly separate frontend, backend, and AI logic
+
+</Project>
