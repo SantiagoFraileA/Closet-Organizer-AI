@@ -13,6 +13,7 @@ export type ClothingCategory = "tops" | "bottoms" | "shoes" | "accessories";
 export interface ClothingItem {
   id: string;
   imageUri: string | null;
+  imageThumb: string | null;
   category: ClothingCategory;
   color: string;
   colorHex: string;
@@ -70,6 +71,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s1",
     imageUri: null,
+    imageThumb: null,
     category: "tops",
     color: "Cream",
     colorHex: "#F5F0E8",
@@ -80,6 +82,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s2",
     imageUri: null,
+    imageThumb: null,
     category: "tops",
     color: "Charcoal",
     colorHex: "#2D2926",
@@ -90,6 +93,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s3",
     imageUri: null,
+    imageThumb: null,
     category: "tops",
     color: "Navy",
     colorHex: "#1E3A5F",
@@ -100,6 +104,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s4",
     imageUri: null,
+    imageThumb: null,
     category: "bottoms",
     color: "Indigo",
     colorHex: "#3730A3",
@@ -110,6 +115,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s5",
     imageUri: null,
+    imageThumb: null,
     category: "bottoms",
     color: "Camel",
     colorHex: "#C4956A",
@@ -120,6 +126,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s6",
     imageUri: null,
+    imageThumb: null,
     category: "shoes",
     color: "White",
     colorHex: "#F0EFEB",
@@ -130,6 +137,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s7",
     imageUri: null,
+    imageThumb: null,
     category: "shoes",
     color: "Tan",
     colorHex: "#B8956A",
@@ -140,6 +148,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
   {
     id: "s8",
     imageUri: null,
+    imageThumb: null,
     category: "accessories",
     color: "Tan",
     colorHex: "#C4956A",

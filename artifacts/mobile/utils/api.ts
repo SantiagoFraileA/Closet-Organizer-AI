@@ -63,6 +63,27 @@ async function get<T>(path: string, token: string): Promise<T> {
   return json as T;
 }
 
+export interface ClothingItemPayload {
+  id: string;
+  name: string;
+  category: string;
+  color: string;
+  colorHex: string;
+  tags: string[];
+  imageThumb?: string | null;
+}
+
+async function postItems<T>(path: string, body: object): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) throw { status: res.status, error: json.error ?? "unknown_error" };
+  return json as T;
+}
+
 export const api = {
   register: (data: {
     firstName: string;
@@ -77,4 +98,7 @@ export const api = {
     post<AuthResult>("/login", { email, password }),
 
   me: (token: string) => get<{ user: AuthUser }>("/me", token),
+
+  saveItems: (items: ClothingItemPayload[]) =>
+    postItems<{ saved: number }>("/api/items", { items }),
 };

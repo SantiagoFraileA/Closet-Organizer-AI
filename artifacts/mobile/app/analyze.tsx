@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClothingCategory, useCloset } from "@/context/ClosetContext";
 import { useColors } from "@/hooks/useColors";
+import { api } from "@/utils/api";
 
 type StyleType = "casual" | "formal" | "streetwear" | "sport" | "bohemian" | "minimalist";
 
@@ -26,7 +28,6 @@ interface DetectedItem {
   style: StyleType;
   tags: string[];
   confirmed: boolean;
-  imageUri?: string;
 }
 
 const CATEGORIES: Array<{ key: ClothingCategory; label: string }> = [
@@ -82,16 +83,33 @@ function colorDist(a: string, b: string) {
   return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
 }
 
+function makeId(): string {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+/** Compress outfit photo → 200×200 JPEG quality 0.25 → base64 (~4-8 KB) */
+async function buildThumb(imageUri: string): Promise<string | null> {
+  if (Platform.OS === "web") return null;
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      imageUri,
+      [{ resize: { width: 200, height: 200 } }],
+      { compress: 0.25, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+    );
+    return result.base64 ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function ItemCard({
   item,
   index,
   onChange,
-  imageUri,
 }: {
   item: DetectedItem;
   index: number;
   onChange: (idx: number, patch: Partial<DetectedItem>) => void;
-  imageUri: string | null;
 }) {
   const colors = useColors();
   const [expanded, setExpanded] = useState(true);
@@ -110,7 +128,6 @@ function ItemCard({
         },
       ]}
     >
-      {/* Card header */}
       <Pressable
         onPress={() => setExpanded((e) => !e)}
         style={styles.cardHeader}
@@ -147,43 +164,29 @@ function ItemCard({
         <View style={[styles.cardBody, { borderTopColor: colors.border }]}>
           {/* Name */}
           <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-              NAME
-            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>NAME</Text>
             <TextInput
               value={item.name}
               onChangeText={(v) => onChange(index, { name: v })}
               style={[
                 styles.textInput,
-                {
-                  backgroundColor: colors.secondary,
-                  color: colors.foreground,
-                  borderRadius: 10,
-                },
+                { backgroundColor: colors.secondary, color: colors.foreground, borderRadius: 10 },
               ]}
             />
           </View>
 
           {/* Category */}
           <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-              CATEGORY
-            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>CATEGORY</Text>
             <View style={styles.chipRow}>
               {CATEGORIES.map((c) => (
                 <Pressable
                   key={c.key}
-                  onPress={() => {
-                    onChange(index, { category: c.key });
-                    Haptics.selectionAsync();
-                  }}
+                  onPress={() => { onChange(index, { category: c.key }); Haptics.selectionAsync(); }}
                   style={[
                     styles.chip,
                     {
-                      backgroundColor:
-                        item.category === c.key
-                          ? colors.foreground
-                          : colors.secondary,
+                      backgroundColor: item.category === c.key ? colors.foreground : colors.secondary,
                       borderRadius: 8,
                     },
                   ]}
@@ -191,12 +194,7 @@ function ItemCard({
                   <Text
                     style={[
                       styles.chipText,
-                      {
-                        color:
-                          item.category === c.key
-                            ? colors.primaryForeground
-                            : colors.mutedForeground,
-                      },
+                      { color: item.category === c.key ? colors.primaryForeground : colors.mutedForeground },
                     ]}
                   >
                     {c.label}
@@ -208,24 +206,16 @@ function ItemCard({
 
           {/* Style */}
           <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-              STYLE
-            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>STYLE</Text>
             <View style={styles.chipRow}>
               {STYLES.map((s) => (
                 <Pressable
                   key={s.key}
-                  onPress={() => {
-                    onChange(index, { style: s.key });
-                    Haptics.selectionAsync();
-                  }}
+                  onPress={() => { onChange(index, { style: s.key }); Haptics.selectionAsync(); }}
                   style={[
                     styles.chip,
                     {
-                      backgroundColor:
-                        item.style === s.key
-                          ? colors.accent
-                          : colors.secondary,
+                      backgroundColor: item.style === s.key ? colors.accent : colors.secondary,
                       borderRadius: 8,
                     },
                   ]}
@@ -233,12 +223,7 @@ function ItemCard({
                   <Text
                     style={[
                       styles.chipText,
-                      {
-                        color:
-                          item.style === s.key
-                            ? "#FFFFFF"
-                            : colors.mutedForeground,
-                      },
+                      { color: item.style === s.key ? "#FFFFFF" : colors.mutedForeground },
                     ]}
                   >
                     {s.label}
@@ -250,24 +235,18 @@ function ItemCard({
 
           {/* Color */}
           <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-              COLOR
-            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>COLOR</Text>
             <View style={styles.colorRow}>
               {COLOR_PRESETS.map((c) => (
                 <Pressable
                   key={c.hex}
-                  onPress={() => {
-                    onChange(index, { color: c.label, colorHex: c.hex });
-                    Haptics.selectionAsync();
-                  }}
+                  onPress={() => { onChange(index, { color: c.label, colorHex: c.hex }); Haptics.selectionAsync(); }}
                   style={[
                     styles.swatch,
                     {
                       backgroundColor: c.hex,
                       borderWidth: item.colorHex === c.hex ? 3 : 1.5,
-                      borderColor:
-                        item.colorHex === c.hex ? colors.accent : colors.border,
+                      borderColor: item.colorHex === c.hex ? colors.accent : colors.border,
                       borderRadius: 20,
                     },
                   ]}
@@ -279,7 +258,7 @@ function ItemCard({
             </Text>
           </View>
 
-          {/* Confirm / Remove */}
+          {/* Confirm button */}
           <View style={styles.cardActions}>
             <Pressable
               onPress={() => {
@@ -293,19 +272,13 @@ function ItemCard({
               style={[
                 styles.confirmBtn,
                 {
-                  backgroundColor: item.confirmed
-                    ? colors.accent
-                    : colors.foreground,
+                  backgroundColor: item.confirmed ? colors.accent : colors.foreground,
                   borderRadius: 12,
                   flex: 1,
                 },
               ]}
             >
-              <Feather
-                name={item.confirmed ? "check" : "plus"}
-                size={16}
-                color="#FFFFFF"
-              />
+              <Feather name={item.confirmed ? "check" : "plus"} size={16} color="#FFFFFF" />
               <Text style={styles.confirmBtnText}>
                 {item.confirmed ? "Confirmed" : "Add to Closet"}
               </Text>
@@ -328,6 +301,7 @@ export default function AnalyzeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DetectedItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [thumb, setThumb] = useState<string | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -340,17 +314,22 @@ export default function AnalyzeScreen() {
       setLoading(true);
       setError(null);
 
-      const res = await fetch("/api/analyze-outfit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: params.imageBase64,
-          mimeType: params.mimeType ?? "image/jpeg",
+      // Run analysis + thumbnail generation in parallel
+      const [res, generatedThumb] = await Promise.all([
+        fetch("/api/analyze-outfit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: params.imageBase64,
+            mimeType: params.mimeType ?? "image/jpeg",
+          }),
         }),
-      });
+        buildThumb(params.imageUri),
+      ]);
+
+      setThumb(generatedThumb);
 
       const json = await res.json();
-
       if (!res.ok) {
         setError(json.error ?? "Error analyzing the image");
         return;
@@ -370,7 +349,6 @@ export default function AnalyzeScreen() {
           : "casual") as StyleType,
         tags: Array.isArray(item.tags) ? item.tags : [],
         confirmed: true,
-        imageUri: params.imageUri,
       }));
 
       setItems(detected);
@@ -392,9 +370,18 @@ export default function AnalyzeScreen() {
     setSaving(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    for (const item of toSave) {
+    // Build items with generated IDs
+    const itemsWithIds = toSave.map((item) => ({
+      ...item,
+      id: makeId(),
+      imageThumb: thumb,
+    }));
+
+    // 1. Save locally (AsyncStorage via context) — instant
+    for (const item of itemsWithIds) {
       addItem({
-        imageUri: item.imageUri ?? null,
+        imageUri: params.imageUri ?? null,
+        imageThumb: item.imageThumb ?? null,
         name: item.name,
         category: item.category,
         color: item.color,
@@ -402,6 +389,21 @@ export default function AnalyzeScreen() {
         tags: [...item.tags, item.style],
       });
     }
+
+    // 2. Persist to DB in background — fire & forget (don't block navigation)
+    api
+      .saveItems(
+        itemsWithIds.map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          color: item.color,
+          colorHex: item.colorHex,
+          tags: [...item.tags, item.style],
+          imageThumb: item.imageThumb,
+        }))
+      )
+      .catch((err) => console.warn("[analyze] Failed to persist items to DB:", err));
 
     router.replace("/(tabs)/");
   }
@@ -459,15 +461,10 @@ export default function AnalyzeScreen() {
       ) : error ? (
         <View style={styles.center}>
           <Feather name="alert-circle" size={40} color={colors.destructive} />
-          <Text style={[styles.errorText, { color: colors.foreground }]}>
-            {error}
-          </Text>
+          <Text style={[styles.errorText, { color: colors.foreground }]}>{error}</Text>
           <Pressable
             onPress={analyzeImage}
-            style={[
-              styles.retryBtn,
-              { backgroundColor: colors.foreground, borderRadius: 12 },
-            ]}
+            style={[styles.retryBtn, { backgroundColor: colors.foreground, borderRadius: 12 }]}
           >
             <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }}>
               Try again
@@ -477,18 +474,13 @@ export default function AnalyzeScreen() {
       ) : items.length === 0 ? (
         <View style={styles.center}>
           <Feather name="search" size={40} color={colors.mutedForeground} />
-          <Text style={[styles.errorText, { color: colors.foreground }]}>
-            No items detected
-          </Text>
+          <Text style={[styles.errorText, { color: colors.foreground }]}>No items detected</Text>
           <Text style={[styles.loadingHint, { color: colors.mutedForeground }]}>
             Try a clearer photo with better lighting
           </Text>
           <Pressable
             onPress={() => router.back()}
-            style={[
-              styles.retryBtn,
-              { backgroundColor: colors.secondary, borderRadius: 12 },
-            ]}
+            style={[styles.retryBtn, { backgroundColor: colors.secondary, borderRadius: 12 }]}
           >
             <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
               Go back
@@ -508,13 +500,7 @@ export default function AnalyzeScreen() {
               Review each item detected by AI. Edit anything before adding to your closet.
             </Text>
             {items.map((item, i) => (
-              <ItemCard
-                key={i}
-                item={item}
-                index={i}
-                onChange={updateItem}
-                imageUri={params.imageUri}
-              />
+              <ItemCard key={i} item={item} index={i} onChange={updateItem} />
             ))}
           </ScrollView>
 
@@ -535,8 +521,7 @@ export default function AnalyzeScreen() {
               style={({ pressed }) => [
                 styles.saveBtn,
                 {
-                  backgroundColor:
-                    confirmedCount > 0 ? colors.foreground : colors.secondary,
+                  backgroundColor: confirmedCount > 0 ? colors.foreground : colors.secondary,
                   borderRadius: 14,
                   opacity: pressed ? 0.85 : 1,
                 },
@@ -549,21 +534,12 @@ export default function AnalyzeScreen() {
                   <Feather
                     name="check-circle"
                     size={18}
-                    color={
-                      confirmedCount > 0
-                        ? colors.primaryForeground
-                        : colors.mutedForeground
-                    }
+                    color={confirmedCount > 0 ? colors.primaryForeground : colors.mutedForeground}
                   />
                   <Text
                     style={[
                       styles.saveBtnText,
-                      {
-                        color:
-                          confirmedCount > 0
-                            ? colors.primaryForeground
-                            : colors.mutedForeground,
-                      },
+                      { color: confirmedCount > 0 ? colors.primaryForeground : colors.mutedForeground },
                     ]}
                   >
                     Add {confirmedCount} item{confirmedCount !== 1 ? "s" : ""} to Closet
@@ -589,16 +565,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerCenter: { alignItems: "center" },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
-  headerSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 17, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -606,122 +574,35 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 32,
   },
-  loadingText: {
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 8,
-  },
-  loadingHint: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
-  errorText: {
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-  },
-  retryBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    marginTop: 8,
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 12,
-  },
-  listHint: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  card: {
-    overflow: "hidden",
-  },
+  loadingText: { fontSize: 17, fontFamily: "Inter_600SemiBold", marginTop: 8 },
+  loadingHint: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
+  errorText: { fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  retryBtn: { paddingHorizontal: 24, paddingVertical: 12, marginTop: 8 },
+  list: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
+  listHint: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", marginBottom: 4 },
+  card: { overflow: "hidden" },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
   },
-  cardHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  cardHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  colorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  cardName: {
-    fontSize: 15,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
-  cardMeta: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  cardBody: {
-    borderTopWidth: 1,
-    padding: 16,
-    gap: 16,
-  },
+  cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  cardHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  colorDot: { width: 32, height: 32, borderRadius: 16, borderWidth: 1 },
+  cardName: { fontSize: 15, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  cardMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  cardBody: { borderTopWidth: 1, padding: 16, gap: 16 },
   field: { gap: 8 },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.6,
-  },
-  textInput: {
-    height: 44,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  chipText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  colorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  swatch: {
-    width: 32,
-    height: 32,
-  },
-  colorName: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  cardActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  fieldLabel: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_600SemiBold", letterSpacing: 0.6 },
+  textInput: { height: 44, paddingHorizontal: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { paddingHorizontal: 12, paddingVertical: 7 },
+  chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  swatch: { width: 32, height: 32 },
+  colorName: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  cardActions: { flexDirection: "row", gap: 10 },
   confirmBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -729,12 +610,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
   },
-  confirmBtnText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
+  confirmBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   saveBar: {
     position: "absolute",
     bottom: 0,
@@ -751,9 +627,5 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 56,
   },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
+  saveBtnText: { fontSize: 16, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
 });
