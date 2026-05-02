@@ -4,55 +4,72 @@ import sharp from "sharp";
 
 const router = Router();
 
-// Gemini prompt — asks for bounding boxes (0-1000 scale, yMin/xMin/yMax/xMax from top-left)
-const SYSTEM_PROMPT = `You are a fashion AI assistant. Analyze the outfit photo and identify every visible clothing item.
+// Vertical zone definitions (0-1000 scale, top-left origin)
+// Each zone maps to a predictable vertical slice of the image
+const ZONE_COORDS: Record<string, { yMin: number; yMax: number }> = {
+  top: { yMin: 0, yMax: 420 },            // head, hat, neck, upper torso
+  "upper-middle": { yMin: 200, yMax: 620 }, // torso, jacket, shirt, bag
+  "lower-middle": { yMin: 440, yMax: 820 }, // waist, pants, skirt, belt
+  bottom: { yMin: 680, yMax: 1000 },       // shoes, socks, ankles
+  full: { yMin: 0, yMax: 1000 },           // accessories, jewelry, watches
+};
 
-Return ONLY valid JSON (no markdown) with this exact structure:
+const SYSTEM_PROMPT = `You are a fashion AI. Analyze this outfit photo and identify every visible clothing item.
+
+Return ONLY valid JSON (no markdown):
 {
   "items": [
     {
-      "name": "descriptive name of the garment",
+      "name": "descriptive name",
       "category": "tops" | "bottoms" | "shoes" | "accessories",
       "color": "color name in English",
-      "colorHex": "#RRGGBB hex code of the dominant color",
+      "colorHex": "#RRGGBB",
       "style": "casual" | "formal" | "streetwear" | "sport" | "bohemian" | "minimalist",
       "tags": ["tag1", "tag2"],
-      "box": { "yMin": 0, "xMin": 0, "yMax": 1000, "xMax": 1000 }
+      "position": "top" | "upper-middle" | "lower-middle" | "bottom" | "full"
     }
   ]
 }
 
-Rules:
-- Detect ALL visible garments including accessories, bags, hats, belts
-- colorHex must be a valid hex code matching the actual color
-- tags should describe fit, fabric, occasion (e.g. "slim fit", "cotton", "summer")
-- box: integer coordinates on a 0–1000 scale, top-left origin (yMin<yMax, xMin<xMax)
-- If you cannot locate a precise bounding box, use the full image area: {"yMin":0,"xMin":0,"yMax":1000,"xMax":1000}`;
+Position guide (where in the photo is this garment located, top of image = head, bottom = feet):
+- "top"          → hats, headbands, scarves, earrings, neck items
+- "upper-middle" → shirts, t-shirts, jackets, blazers, coats, tops, bags, backpacks
+- "lower-middle" → trousers, jeans, skirts, shorts, waist belts
+- "bottom"       → shoes, sneakers, boots, sandals, socks
+- "full"         → watches, bracelets, rings, sunglasses, full-length dresses/jumpsuits
 
-/** Crop a bounding box from a base64 image buffer, resize and compress to JPEG thumbnail */
-async function cropThumb(
+Rules:
+- Detect ALL visible garments and accessories
+- colorHex must match the actual color
+- tags: fit, fabric, occasion (e.g. "slim fit", "cotton", "summer")
+- Choose position based on WHERE in the photo the item appears`;
+
+/** Crop a vertical zone from image, adding slight horizontal padding */
+async function cropZone(
   imageBuffer: Buffer,
-  box: { yMin: number; xMin: number; yMax: number; xMax: number }
+  position: string
 ): Promise<string | null> {
   try {
+    const zone = ZONE_COORDS[position] ?? ZONE_COORDS["full"];
     const img = sharp(imageBuffer);
     const meta = await img.metadata();
     const W = meta.width ?? 1;
     const H = meta.height ?? 1;
 
-    // Clamp and convert 0-1000 scale to pixels
-    const left = Math.max(0, Math.round((box.xMin / 1000) * W));
-    const top = Math.max(0, Math.round((box.yMin / 1000) * H));
-    const right = Math.min(W, Math.round((box.xMax / 1000) * W));
-    const bottom = Math.min(H, Math.round((box.yMax / 1000) * H));
-
-    const width = Math.max(1, right - left);
+    // Vertical crop from zone
+    const top = Math.max(0, Math.round((zone.yMin / 1000) * H));
+    const bottom = Math.min(H, Math.round((zone.yMax / 1000) * H));
     const height = Math.max(1, bottom - top);
+
+    // Horizontal: full width with small padding removed for a cleaner crop
+    const hPad = Math.round(W * 0.05);
+    const left = hPad;
+    const width = Math.max(1, W - hPad * 2);
 
     const thumb = await sharp(imageBuffer)
       .extract({ left, top, width, height })
       .resize(200, 200, { fit: "cover", position: "centre" })
-      .jpeg({ quality: 28, mozjpeg: true })
+      .jpeg({ quality: 30 })
       .toBuffer();
 
     return thumb.toString("base64");
@@ -70,7 +87,7 @@ router.post("/analyze-outfit", async (req, res) => {
   }
 
   try {
-    // 1. Ask Gemini to detect items + bounding boxes
+    // 1. Ask Gemini to detect items + vertical positions
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
@@ -103,24 +120,22 @@ router.post("/analyze-outfit", async (req, res) => {
     }
 
     const rawItems: any[] = parsed.items ?? [];
-
-    // 2. Decode full-resolution image once
     const imageBuffer = Buffer.from(imageBase64, "base64");
 
-    // 3. Crop individual thumbnails in parallel — one per detected item
+    // 2. Crop individual zones in parallel
     const itemsWithThumbs = await Promise.all(
       rawItems.map(async (item) => {
-        const box = item.box ?? { yMin: 0, xMin: 0, yMax: 1000, xMax: 1000 };
+        // Fallback: infer position from category if Gemini didn't provide one
+        const position =
+          item.position ??
+          ({
+            tops: "upper-middle",
+            bottoms: "lower-middle",
+            shoes: "bottom",
+            accessories: "full",
+          }[item.category as string] ?? "full");
 
-        // Validate box shape
-        const safeBox = {
-          yMin: Number(box.yMin ?? 0),
-          xMin: Number(box.xMin ?? 0),
-          yMax: Number(box.yMax ?? 1000),
-          xMax: Number(box.xMax ?? 1000),
-        };
-
-        const imageThumb = await cropThumb(imageBuffer, safeBox);
+        const imageThumb = await cropZone(imageBuffer, position);
 
         return {
           name: item.name ?? "Clothing item",
@@ -129,7 +144,7 @@ router.post("/analyze-outfit", async (req, res) => {
           colorHex: item.colorHex ?? "#9E9E9E",
           style: item.style ?? "casual",
           tags: Array.isArray(item.tags) ? item.tags : [],
-          imageThumb, // base64 JPEG 200×200, ~4-8 KB
+          imageThumb,
         };
       })
     );
