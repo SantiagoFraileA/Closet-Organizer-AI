@@ -445,16 +445,20 @@ export default function AnalyzeScreen() {
     }
 
     // Save outfit look (the full outfit composition)
-    if (saveLook && params.imageUri) {
+    if (saveLook) {
       try {
-        let lookThumb: string | null = null;
-        if (Platform.OS !== "web") {
-          const compressed = await ImageManipulator.manipulateAsync(
-            params.imageUri,
-            [{ resize: { width: 400 } }],
-            { compress: 0.35, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-          );
-          lookThumb = compressed.base64 ?? null;
+        // Start with the original base64 as guaranteed fallback
+        let lookThumb: string | null = params.imageBase64 ?? null;
+        // Try to create a smaller version from the URI if available
+        if (Platform.OS !== "web" && params.imageUri) {
+          try {
+            const compressed = await ImageManipulator.manipulateAsync(
+              params.imageUri,
+              [{ resize: { width: 500 } }],
+              { compress: 0.4, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
+            lookThumb = compressed.base64 ?? lookThumb;
+          } catch { /* keep original base64 */ }
         }
         addLook({
           name: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
