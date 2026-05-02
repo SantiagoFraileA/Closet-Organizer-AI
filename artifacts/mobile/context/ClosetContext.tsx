@@ -37,6 +37,7 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
   age: string;
   gender: string;
 }
@@ -53,6 +54,7 @@ interface ClosetContextValue {
   rateOutfit: (outfitId: string, rating: "like" | "dislike") => void;
   generateOutfits: (comfortZone?: boolean) => Outfit[];
   completeOnboarding: (profile: UserProfile) => void;
+  signIn: (email: string, password: string) => Promise<"ok" | "wrong_password" | "not_found">;
   setProfileName: (name: string) => void;
   signOut: () => void;
 }
@@ -294,6 +296,24 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem("@cf_user_profile", JSON.stringify(profile));
   }, []);
 
+  const signIn = useCallback(async (email: string, password: string): Promise<"ok" | "wrong_password" | "not_found"> => {
+    try {
+      const profileStr = await AsyncStorage.getItem("@cf_user_profile");
+      if (!profileStr) return "not_found";
+      const stored: UserProfile = JSON.parse(profileStr);
+      if (stored.email.toLowerCase() !== email.toLowerCase()) return "not_found";
+      if (stored.password !== password) return "wrong_password";
+      const fullName = `${stored.firstName} ${stored.lastName}`.trim() || stored.firstName || "Stylist";
+      setIsOnboarded(true);
+      setProfileNameState(fullName);
+      setUserProfileState(stored);
+      await AsyncStorage.setItem("@cf_onboarded", "true");
+      return "ok";
+    } catch {
+      return "not_found";
+    }
+  }, []);
+
   const setProfileName = useCallback((name: string) => {
     setProfileNameState(name);
     AsyncStorage.setItem("@cf_profile", JSON.stringify(name));
@@ -322,6 +342,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         rateOutfit,
         generateOutfits,
         completeOnboarding,
+        signIn,
         setProfileName,
         signOut,
       }}
