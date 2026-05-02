@@ -115,11 +115,25 @@ function ClassicTabLayout() {
                 size={28}
               />
             ) : (
-              <Feather
-                name="plus-circle"
-                size={24}
-                color={focused ? colors.accent : color}
-              />
+              <View
+                style={[
+                  styles.addIcon,
+                  {
+                    backgroundColor: focused
+                      ? colors.foreground
+                      : colors.secondary,
+                    borderRadius: 16,
+                  },
+                ]}
+              >
+                <Feather
+                  name="plus"
+                  size={20}
+                  color={
+                    focused ? colors.primaryForeground : colors.mutedForeground
+                  }
+                />
+              </View>
             ),
           tabBarActiveTintColor: colors.accent,
         }}
