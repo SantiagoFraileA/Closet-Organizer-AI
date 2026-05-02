@@ -33,17 +33,26 @@ export interface Rating {
   ratedAt: number;
 }
 
+export interface UserProfile {
+  firstName: string;
+  lastName: string;
+  email: string;
+  age: string;
+  gender: string;
+}
+
 interface ClosetContextValue {
   items: ClothingItem[];
   outfits: Outfit[];
   ratings: Rating[];
   profileName: string;
+  userProfile: UserProfile | null;
   isOnboarded: boolean;
   addItem: (item: Omit<ClothingItem, "id" | "addedAt">) => void;
   removeItem: (id: string) => void;
   rateOutfit: (outfitId: string, rating: "like" | "dislike") => void;
   generateOutfits: (comfortZone?: boolean) => Outfit[];
-  completeOnboarding: (name: string) => void;
+  completeOnboarding: (profile: UserProfile) => void;
   setProfileName: (name: string) => void;
   signOut: () => void;
 }
@@ -198,18 +207,20 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [profileName, setProfileNameState] = useState("");
+  const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [itemsStr, ratingsStr, profileStr, onboardedStr] =
+        const [itemsStr, ratingsStr, profileStr, onboardedStr, userProfileStr] =
           await Promise.all([
             AsyncStorage.getItem("@cf_items"),
             AsyncStorage.getItem("@cf_ratings"),
             AsyncStorage.getItem("@cf_profile"),
             AsyncStorage.getItem("@cf_onboarded"),
+            AsyncStorage.getItem("@cf_user_profile"),
           ]);
 
         const loadedItems = itemsStr ? JSON.parse(itemsStr) : SAMPLE_ITEMS;
@@ -222,6 +233,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         setItems(loadedItems);
         if (ratingsStr) setRatings(JSON.parse(ratingsStr));
         if (profileStr) setProfileNameState(JSON.parse(profileStr));
+        if (userProfileStr) setUserProfileState(JSON.parse(userProfileStr));
         setIsOnboarded(onboardedStr === "true");
         setOutfits(buildOutfits(loadedItems, false));
       } catch {
@@ -272,11 +284,14 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     [items]
   );
 
-  const completeOnboarding = useCallback((name: string) => {
+  const completeOnboarding = useCallback((profile: UserProfile) => {
+    const fullName = `${profile.firstName} ${profile.lastName}`.trim() || profile.firstName || "Stylist";
     setIsOnboarded(true);
-    setProfileNameState(name);
+    setProfileNameState(fullName);
+    setUserProfileState(profile);
     AsyncStorage.setItem("@cf_onboarded", "true");
-    AsyncStorage.setItem("@cf_profile", JSON.stringify(name));
+    AsyncStorage.setItem("@cf_profile", JSON.stringify(fullName));
+    AsyncStorage.setItem("@cf_user_profile", JSON.stringify(profile));
   }, []);
 
   const setProfileName = useCallback((name: string) => {
@@ -285,9 +300,10 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await AsyncStorage.multiRemove(["@cf_onboarded", "@cf_profile"]);
+    await AsyncStorage.multiRemove(["@cf_onboarded", "@cf_profile", "@cf_user_profile"]);
     setIsOnboarded(false);
     setProfileNameState("");
+    setUserProfileState(null);
   }, []);
 
   if (!loaded) return null;
@@ -299,6 +315,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         outfits,
         ratings,
         profileName,
+        userProfile,
         isOnboarded,
         addItem,
         removeItem,
