@@ -167,11 +167,13 @@ export default function OnboardingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { completeOnboarding } = useCloset();
+  const { completeOnboarding, signIn } = useCloset();
 
   const [step, setStep] = useState(0);
   const [showEmailForm, setShowEmailForm] = useState(false);
+  const [showSignInForm, setShowSignInForm] = useState(false);
 
+  // Registration fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -180,6 +182,13 @@ export default function OnboardingScreen() {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sign-in fields
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [signInError, setSignInError] = useState("");
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -229,32 +238,173 @@ export default function OnboardingScreen() {
     return errs;
   };
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    completeOnboarding({ firstName, lastName, email, age, gender });
-    router.replace("/(tabs)");
+    setIsSubmitting(true);
+    try {
+      await completeOnboarding({ firstName, lastName, email, password, age, gender });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      console.error("register error", JSON.stringify(err));
+      if (err?.error === "email_taken") {
+        setErrors({ email: "An account with this email already exists." });
+      } else if (err?.message) {
+        setErrors({ email: `Error: ${err.message}` });
+      } else {
+        setErrors({ email: `Error: ${JSON.stringify(err)}` });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSignIn = () => {
-    Haptics.selectionAsync();
-    completeOnboarding({
-      firstName: "User",
-      lastName: "",
-      email: "",
-      age: "",
-      gender: "",
-    });
-    router.replace("/(tabs)");
+  const handleSignIn = async () => {
+    setSignInError("");
+    if (!signInEmail.trim() || !signInPassword) {
+      setSignInError("Please enter your email and password.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    const result = await signIn(signInEmail.trim(), signInPassword);
+    if (result === "ok") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/(tabs)");
+    } else if (result === "wrong_password") {
+      setSignInError("Incorrect password. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } else {
+      setSignInError("No account found with that email.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const inputBorder = (field: string) =>
     errors[field] ? colors.destructive : colors.border;
+
+  // ── Full-screen sign-in form ─────────────────────────────────────────────
+  if (showSignInForm) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.formScreen,
+            { paddingTop: topPad + 20, paddingBottom: botPad + 32 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable onPress={() => { setShowSignInForm(false); setSignInError(""); }} style={styles.backBtn}>
+            <Text style={[styles.backBtnText, { color: colors.mutedForeground }]}>← Back</Text>
+          </Pressable>
+
+          <View style={styles.formHeader}>
+            <Text style={[styles.formTitle, { color: colors.foreground }]}>Welcome back.</Text>
+            <Text style={[styles.formSubtitle, { color: colors.mutedForeground }]}>
+              Sign in to your Closetfy account.
+            </Text>
+          </View>
+
+          <View style={styles.fields}>
+            {/* Email */}
+            <TextInput
+              value={signInEmail}
+              onChangeText={(v) => { setSignInEmail(v); setSignInError(""); }}
+              placeholder="Email address"
+              placeholderTextColor={colors.mutedForeground}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: signInError ? colors.destructive : colors.border,
+                  color: colors.foreground,
+                  borderRadius: colors.radius,
+                },
+              ]}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoFocus
+              returnKeyType="next"
+            />
+
+            {/* Password */}
+            <View
+              style={[
+                styles.input,
+                styles.passwordWrap,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: signInError ? colors.destructive : colors.border,
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              <TextInput
+                value={signInPassword}
+                onChangeText={(v) => { setSignInPassword(v); setSignInError(""); }}
+                placeholder="Password"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.passwordInput, { color: colors.foreground }]}
+                secureTextEntry={!showSignInPassword}
+                autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={handleSignIn}
+              />
+              <Pressable onPress={() => setShowSignInPassword((v) => !v)} hitSlop={8} style={styles.eyeBtn}>
+                <Text style={{ fontSize: 18, color: colors.mutedForeground }}>
+                  {showSignInPassword ? "🙈" : "👁"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Error */}
+            {signInError ? (
+              <Text style={[styles.errMsg, { color: colors.destructive, fontSize: 14, marginTop: -4 }]}>
+                {signInError}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.formBottom}>
+            <Pressable
+              onPress={handleSignIn}
+              style={({ pressed }) => [
+                styles.createBtn,
+                {
+                  backgroundColor: colors.foreground,
+                  borderRadius: colors.radius,
+                  opacity: pressed ? 0.87 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text style={[styles.createBtnText, { color: colors.primaryForeground }]}>
+                Sign in
+              </Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setShowSignInForm(false); setShowEmailForm(true); }}>
+              <Text style={[styles.termsText, { color: colors.mutedForeground }]}>
+                Don't have an account?{" "}
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                  Sign up
+                </Text>
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
   // ── Full-screen email registration form ──────────────────────────────────
   if (showEmailForm) {
@@ -497,12 +647,13 @@ export default function OnboardingScreen() {
           <View style={styles.formBottom}>
             <Pressable
               onPress={handleCreateAccount}
+              disabled={isSubmitting}
               style={({ pressed }) => [
                 styles.createBtn,
                 {
                   backgroundColor: colors.foreground,
                   borderRadius: colors.radius,
-                  opacity: pressed ? 0.87 : 1,
+                  opacity: isSubmitting ? 0.6 : pressed ? 0.87 : 1,
                   transform: [{ scale: pressed ? 0.97 : 1 }],
                 },
               ]}
@@ -510,7 +661,7 @@ export default function OnboardingScreen() {
               <Text
                 style={[styles.createBtnText, { color: colors.primaryForeground }]}
               >
-                Create account
+                {isSubmitting ? "Creating account…" : "Create account"}
               </Text>
             </Pressable>
 
@@ -597,6 +748,7 @@ export default function OnboardingScreen() {
             </Text>
 
             <View style={styles.authButtons}>
+              {/* Google — coming soon */}
               <Pressable
                 style={({ pressed }) => [
                   styles.socialBtn,
@@ -609,20 +761,8 @@ export default function OnboardingScreen() {
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.socialIcon,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  G
-                </Text>
-                <Text
-                  style={[
-                    styles.socialBtnText,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
+                <Text style={[styles.socialIcon, { color: colors.mutedForeground }]}>G</Text>
+                <Text style={[styles.socialBtnText, { color: colors.mutedForeground }]}>
                   Continue with Google
                 </Text>
                 <View style={styles.comingSoonBadge}>
@@ -630,64 +770,15 @@ export default function OnboardingScreen() {
                 </View>
               </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.socialBtn,
-                  {
-                    backgroundColor: colors.secondary,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius,
-                    opacity: pressed ? 0.8 : 1,
-                    transform: [{ scale: pressed ? 0.97 : 1 }],
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.socialIcon,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  
-                </Text>
-                <Text
-                  style={[
-                    styles.socialBtnText,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  Continue with Apple
-                </Text>
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Soon</Text>
-                </View>
-              </Pressable>
-
               <View style={styles.dividerRow}>
-                <View
-                  style={[
-                    styles.dividerLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.dividerText,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  or
-                </Text>
-                <View
-                  style={[
-                    styles.dividerLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>or</Text>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
               </View>
 
+              {/* Sign in — primary big button */}
               <Pressable
-                onPress={() => setShowEmailForm(true)}
+                onPress={() => setShowSignInForm(true)}
                 style={({ pressed }) => [
                   styles.socialBtn,
                   {
@@ -699,21 +790,8 @@ export default function OnboardingScreen() {
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.socialIcon,
-                    { color: colors.primaryForeground },
-                  ]}
-                >
-                  ✉
-                </Text>
-                <Text
-                  style={[
-                    styles.socialBtnText,
-                    { color: colors.primaryForeground },
-                  ]}
-                >
-                  Sign up with Email
+                <Text style={[styles.socialBtnText, { color: colors.primaryForeground, textAlign: "center" }]}>
+                  Sign in
                 </Text>
               </Pressable>
             </View>
@@ -736,9 +814,7 @@ export default function OnboardingScreen() {
               },
             ]}
           >
-            <Text
-              style={[styles.nextText, { color: colors.primaryForeground }]}
-            >
+            <Text style={[styles.nextText, { color: colors.primaryForeground }]}>
               {step === STEPS.length - 1 ? "Let's begin" : "Continue"}
             </Text>
           </Pressable>
@@ -747,18 +823,11 @@ export default function OnboardingScreen() {
 
       {isAuthStep && (
         <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
-          <Pressable onPress={handleSignIn} style={styles.signInLink}>
-            <Text
-              style={[styles.signInText, { color: colors.mutedForeground }]}
-            >
-              Already have an account?{" "}
-              <Text
-                style={{
-                  color: colors.foreground,
-                  fontFamily: "Inter_600SemiBold",
-                }}
-              >
-                Sign in
+          <Pressable onPress={() => setShowEmailForm(true)} style={styles.signInLink}>
+            <Text style={[styles.signInText, { color: colors.mutedForeground }]}>
+              Don't have an account?{" "}
+              <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                Sign up
               </Text>
             </Text>
           </Pressable>
