@@ -82,8 +82,20 @@ function LooksStrip() {
   const colors = useColors();
   const { savedLooks, removeLook } = useCloset();
   const [selected, setSelected] = useState<SavedLook | null>(null);
+  const [open, setOpen] = useState(false);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: open ? 1 : 0,
+      duration: 260,
+      useNativeDriver: false,
+    }).start();
+  }, [open]);
 
   if (!savedLooks.length) return null;
+
+  const arrowRotate = anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
 
   return (
     <>
@@ -94,36 +106,57 @@ function LooksStrip() {
           onDelete={() => { removeLook(selected.id); setSelected(null); }}
         />
       )}
-      <View style={ls.container}>
-        <View style={ls.titleRow}>
-          <Text style={[ls.title, { color: colors.foreground }]}>My Looks</Text>
-          <Text style={[ls.count, { color: colors.mutedForeground }]}>{savedLooks.length} saved</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ls.scroll}>
-          {savedLooks.map((look) => (
-            <Pressable
-              key={look.id}
-              onPress={() => { setSelected(look); Haptics.selectionAsync(); }}
-              style={({ pressed }) => [ls.card, { opacity: pressed ? 0.85 : 1 }]}
-            >
-              {look.imageThumb ? (
-                <Image
-                  source={{ uri: `data:image/jpeg;base64,${look.imageThumb}` }}
-                  style={[ls.photo, { borderRadius: 12, borderColor: colors.border }]}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[ls.photo, { borderRadius: 12, backgroundColor: colors.secondary, borderColor: colors.border, alignItems: "center", justifyContent: "center" }]}>
-                  <Feather name="image" size={22} color={colors.mutedForeground} />
-                </View>
-              )}
-              <Text style={[ls.cardDate, { color: colors.mutedForeground }]} numberOfLines={1}>{look.name}</Text>
-              <Text style={[ls.cardItems, { color: colors.foreground }]} numberOfLines={1}>
-                {look.itemNames.slice(0, 2).join(", ")}{look.itemNames.length > 2 ? ` +${look.itemNames.length - 2}` : ""}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+      <View style={[ls.container, { borderBottomColor: colors.border }]}>
+        {/* Header — always visible, tappable */}
+        <Pressable
+          onPress={() => { setOpen(v => !v); Haptics.selectionAsync(); }}
+          style={ls.titleRow}
+        >
+          <View style={ls.titleLeft}>
+            <Feather name="layers" size={15} color={colors.accent} />
+            <Text style={[ls.title, { color: colors.foreground }]}>My Looks</Text>
+            <View style={[ls.badge, { backgroundColor: colors.accent + "20" }]}>
+              <Text style={[ls.badgeText, { color: colors.accent }]}>{savedLooks.length}</Text>
+            </View>
+          </View>
+          <Animated.View style={{ transform: [{ rotate: arrowRotate }] }}>
+            <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
+          </Animated.View>
+        </Pressable>
+
+        {/* Collapsible content */}
+        {open && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={ls.scroll}
+            style={ls.scrollWrapper}
+          >
+            {savedLooks.map((look) => (
+              <Pressable
+                key={look.id}
+                onPress={() => { setSelected(look); Haptics.selectionAsync(); }}
+                style={({ pressed }) => [ls.card, { opacity: pressed ? 0.85 : 1 }]}
+              >
+                {look.imageThumb ? (
+                  <Image
+                    source={{ uri: `data:image/jpeg;base64,${look.imageThumb}` }}
+                    style={[ls.photo, { borderRadius: 12, borderColor: colors.border }]}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[ls.photo, { borderRadius: 12, backgroundColor: colors.secondary, borderColor: colors.border, alignItems: "center", justifyContent: "center" }]}>
+                    <Feather name="image" size={22} color={colors.mutedForeground} />
+                  </View>
+                )}
+                <Text style={[ls.cardDate, { color: colors.mutedForeground }]} numberOfLines={1}>{look.name}</Text>
+                <Text style={[ls.cardItems, { color: colors.foreground }]} numberOfLines={1}>
+                  {look.itemNames.slice(0, 2).join(", ")}{look.itemNames.length > 2 ? ` +${look.itemNames.length - 2}` : ""}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
     </>
   );
@@ -361,10 +394,13 @@ const styles = StyleSheet.create({
 });
 
 const ls = StyleSheet.create({
-  container: { paddingTop: 20, paddingBottom: 4 },
-  titleRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 12 },
-  title: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  count: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  container: { paddingTop: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14 },
+  titleLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  badge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  scrollWrapper: { marginBottom: 16 },
   scroll: { paddingHorizontal: 20, gap: 12 },
   card: { width: 120 },
   photo: { width: 120, height: 160, borderWidth: 1, marginBottom: 8 },
