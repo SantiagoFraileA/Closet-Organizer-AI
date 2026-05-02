@@ -54,10 +54,12 @@ function GenderPicker({
   value,
   onSelect,
   colors,
+  hasError,
 }: {
   value: string;
   onSelect: (v: string) => void;
   colors: ReturnType<typeof import("@/hooks/useColors").useColors>;
+  hasError?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -71,7 +73,11 @@ function GenderPicker({
           styles.pickerBtn,
           {
             backgroundColor: colors.card,
-            borderColor: value ? colors.foreground : colors.border,
+            borderColor: hasError
+              ? colors.destructive
+              : value
+              ? colors.foreground
+              : colors.border,
             borderRadius: colors.radius,
           },
         ]}
@@ -84,7 +90,7 @@ function GenderPicker({
         >
           {value || "Gender"}
         </Text>
-        <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>▼</Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>▼</Text>
       </Pressable>
 
       <Modal
@@ -99,11 +105,14 @@ function GenderPicker({
               styles.modalSheet,
               {
                 backgroundColor: colors.card,
-                paddingBottom: (Platform.OS === "web" ? 24 : insets.bottom) + 16,
+                paddingBottom:
+                  (Platform.OS === "web" ? 24 : insets.bottom) + 16,
               },
             ]}
           >
-            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <View
+              style={[styles.modalHandle, { backgroundColor: colors.border }]}
+            />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
               Select Gender
             </Text>
@@ -120,7 +129,7 @@ function GenderPicker({
                   {
                     backgroundColor:
                       opt === value
-                        ? colors.foreground + "0F"
+                        ? colors.foreground + "10"
                         : pressed
                         ? colors.secondary
                         : "transparent",
@@ -134,7 +143,9 @@ function GenderPicker({
                     {
                       color: colors.foreground,
                       fontFamily:
-                        opt === value ? "Inter_600SemiBold" : "Inter_400Regular",
+                        opt === value
+                          ? "Inter_600SemiBold"
+                          : "Inter_400Regular",
                     },
                   ]}
                 >
@@ -164,6 +175,8 @@ export default function OnboardingScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -178,27 +191,41 @@ export default function OnboardingScreen() {
 
   const animate = (cb: () => void) => {
     Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
     ]).start();
     cb();
   };
 
   const goNext = () => {
     Haptics.selectionAsync();
-    if (step < STEPS.length) {
-      animate(() => setStep((s) => s + 1));
-    }
+    if (step < STEPS.length) animate(() => setStep((s) => s + 1));
   };
 
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!firstName.trim()) errs.firstName = "Required";
     if (!lastName.trim()) errs.lastName = "Required";
-    if (!email.trim() || !email.includes("@")) errs.email = "Enter a valid email";
-    if (!age.trim() || isNaN(Number(age)) || Number(age) < 13 || Number(age) > 120)
-      errs.age = "Enter a valid age (13+)";
-    if (!gender) errs.gender = "Please select a gender";
+    if (!email.trim() || !email.includes("@"))
+      errs.email = "Enter a valid email";
+    if (!password || password.length < 6)
+      errs.password = "At least 6 characters";
+    if (
+      !age.trim() ||
+      isNaN(Number(age)) ||
+      Number(age) < 13 ||
+      Number(age) > 120
+    )
+      errs.age = "Must be 13+";
+    if (!gender) errs.gender = "Required";
     return errs;
   };
 
@@ -226,339 +253,523 @@ export default function OnboardingScreen() {
     router.replace("/(tabs)");
   };
 
-  const accentColor = currentStep?.accent ?? colors.accent;
+  const inputBorder = (field: string) =>
+    errors[field] ? colors.destructive : colors.border;
 
-  const inputStyle = (field: string) => [
-    styles.input,
-    {
-      backgroundColor: colors.card,
-      borderColor: errors[field] ? colors.destructive : colors.border,
-      color: colors.foreground,
-      borderRadius: colors.radius,
-    },
-  ];
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: colors.background, paddingTop: topPad + 16 },
-        ]}
+  // ── Full-screen email registration form ──────────────────────────────────
+  if (showEmailForm) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Progress dots */}
-        <View style={styles.dotsRow}>
-          {Array.from({ length: totalDots }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: i <= step ? colors.foreground : colors.border,
-                  width: i === step ? 28 : 8,
-                },
-              ]}
-            />
-          ))}
-        </View>
+        <ScrollView
+          contentContainerStyle={[
+            styles.formScreen,
+            {
+              paddingTop: topPad + 20,
+              paddingBottom: botPad + 32,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Back */}
+          <Pressable
+            onPress={() => setShowEmailForm(false)}
+            style={styles.backBtn}
+          >
+            <Text style={[styles.backBtnText, { color: colors.mutedForeground }]}>
+              ← Back
+            </Text>
+          </Pressable>
 
-        {/* Content */}
-        <Animated.View style={[{ opacity: fadeAnim }, styles.contentWrap]}>
-          {!isAuthStep ? (
-            <View style={styles.slideContent}>
-              <View
-                style={[
-                  styles.illustration,
-                  {
-                    backgroundColor: accentColor + "18",
-                    borderRadius: colors.radius * 2,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.innerCircle,
-                    { backgroundColor: accentColor + "35", borderRadius: 88 },
-                  ]}
-                >
-                  <Text style={styles.stepIcon}>{currentStep.icon}</Text>
-                </View>
-              </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                {currentStep.title}
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                {currentStep.subtitle}
-              </Text>
-            </View>
-          ) : showEmailForm ? (
-            /* ── Email registration form ── */
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={styles.formScroll}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+          {/* Header */}
+          <View style={styles.formHeader}>
+            <Text style={[styles.formTitle, { color: colors.foreground }]}>
+              Create account
+            </Text>
+            <Text
+              style={[styles.formSubtitle, { color: colors.mutedForeground }]}
             >
-              <Text style={[styles.formTitle, { color: colors.foreground }]}>
-                Create account
-              </Text>
-              <Text style={[styles.formSubtitle, { color: colors.mutedForeground }]}>
-                Tell us a bit about yourself.
-              </Text>
+              Tell us a bit about yourself.
+            </Text>
+          </View>
 
-              {/* Row: first + last name */}
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    value={firstName}
-                    onChangeText={(v) => {
-                      setFirstName(v);
-                      setErrors((e) => ({ ...e, firstName: "" }));
-                    }}
-                    placeholder="First name"
-                    placeholderTextColor={colors.mutedForeground}
-                    style={inputStyle("firstName")}
-                    autoFocus
-                    returnKeyType="next"
-                  />
-                  {errors.firstName ? (
-                    <Text style={[styles.errorText, { color: colors.destructive }]}>
-                      {errors.firstName}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    value={lastName}
-                    onChangeText={(v) => {
-                      setLastName(v);
-                      setErrors((e) => ({ ...e, lastName: "" }));
-                    }}
-                    placeholder="Last name"
-                    placeholderTextColor={colors.mutedForeground}
-                    style={inputStyle("lastName")}
-                    returnKeyType="next"
-                  />
-                  {errors.lastName ? (
-                    <Text style={[styles.errorText, { color: colors.destructive }]}>
-                      {errors.lastName}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-
-              {/* Email */}
-              <View>
+          {/* Fields */}
+          <View style={styles.fields}>
+            {/* First + Last name */}
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
                 <TextInput
-                  value={email}
+                  value={firstName}
                   onChangeText={(v) => {
-                    setEmail(v);
-                    setErrors((e) => ({ ...e, email: "" }));
+                    setFirstName(v);
+                    setErrors((e) => ({ ...e, firstName: "" }));
                   }}
-                  placeholder="Email address"
+                  placeholder="First name"
                   placeholderTextColor={colors.mutedForeground}
-                  style={inputStyle("email")}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: inputBorder("firstName"),
+                      color: colors.foreground,
+                      borderRadius: colors.radius,
+                    },
+                  ]}
+                  autoFocus
                   returnKeyType="next"
                 />
-                {errors.email ? (
-                  <Text style={[styles.errorText, { color: colors.destructive }]}>
-                    {errors.email}
+                {errors.firstName ? (
+                  <Text
+                    style={[styles.errMsg, { color: colors.destructive }]}
+                  >
+                    {errors.firstName}
                   </Text>
                 ) : null}
               </View>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={lastName}
+                  onChangeText={(v) => {
+                    setLastName(v);
+                    setErrors((e) => ({ ...e, lastName: "" }));
+                  }}
+                  placeholder="Last name"
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: inputBorder("lastName"),
+                      color: colors.foreground,
+                      borderRadius: colors.radius,
+                    },
+                  ]}
+                  returnKeyType="next"
+                />
+                {errors.lastName ? (
+                  <Text
+                    style={[styles.errMsg, { color: colors.destructive }]}
+                  >
+                    {errors.lastName}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
 
-              {/* Row: age + gender */}
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    value={age}
-                    onChangeText={(v) => {
-                      setAge(v.replace(/[^0-9]/g, ""));
-                      setErrors((e) => ({ ...e, age: "" }));
+            {/* Email */}
+            <View>
+              <TextInput
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setErrors((e) => ({ ...e, email: "" }));
+                }}
+                placeholder="Email address"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: inputBorder("email"),
+                    color: colors.foreground,
+                    borderRadius: colors.radius,
+                  },
+                ]}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="next"
+              />
+              {errors.email ? (
+                <Text style={[styles.errMsg, { color: colors.destructive }]}>
+                  {errors.email}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Password */}
+            <View>
+              <View
+                style={[
+                  styles.input,
+                  styles.passwordWrap,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: inputBorder("password"),
+                    borderRadius: colors.radius,
+                  },
+                ]}
+              >
+                <TextInput
+                  value={password}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    setErrors((e) => ({ ...e, password: "" }));
+                  }}
+                  placeholder="Password"
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[
+                    styles.passwordInput,
+                    { color: colors.foreground },
+                  ]}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  returnKeyType="next"
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={8}
+                  style={styles.eyeBtn}
+                >
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      color: colors.mutedForeground,
                     }}
-                    placeholder="Age"
-                    placeholderTextColor={colors.mutedForeground}
-                    style={inputStyle("age")}
-                    keyboardType="number-pad"
-                    maxLength={3}
-                    returnKeyType="done"
-                  />
-                  {errors.age ? (
-                    <Text style={[styles.errorText, { color: colors.destructive }]}>
-                      {errors.age}
-                    </Text>
-                  ) : null}
+                  >
+                    {showPassword ? "🙈" : "👁"}
+                  </Text>
+                </Pressable>
+              </View>
+              {errors.password ? (
+                <Text style={[styles.errMsg, { color: colors.destructive }]}>
+                  {errors.password}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Age + Gender */}
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={age}
+                  onChangeText={(v) => {
+                    setAge(v.replace(/[^0-9]/g, ""));
+                    setErrors((e) => ({ ...e, age: "" }));
+                  }}
+                  placeholder="Age"
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: inputBorder("age"),
+                      color: colors.foreground,
+                      borderRadius: colors.radius,
+                    },
+                  ]}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  returnKeyType="done"
+                />
+                {errors.age ? (
+                  <Text
+                    style={[styles.errMsg, { color: colors.destructive }]}
+                  >
+                    {errors.age}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={{ flex: 1.5 }}>
+                <GenderPicker
+                  value={gender}
+                  onSelect={(v) => {
+                    setGender(v);
+                    setErrors((e) => ({ ...e, gender: "" }));
+                  }}
+                  colors={colors}
+                  hasError={!!errors.gender}
+                />
+                {errors.gender ? (
+                  <Text
+                    style={[styles.errMsg, { color: colors.destructive }]}
+                  >
+                    {errors.gender}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
+          {/* CTA */}
+          <View style={styles.formBottom}>
+            <Pressable
+              onPress={handleCreateAccount}
+              style={({ pressed }) => [
+                styles.createBtn,
+                {
+                  backgroundColor: colors.foreground,
+                  borderRadius: colors.radius,
+                  opacity: pressed ? 0.87 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={[styles.createBtnText, { color: colors.primaryForeground }]}
+              >
+                Create account
+              </Text>
+            </Pressable>
+
+            <Text
+              style={[styles.termsText, { color: colors.mutedForeground }]}
+            >
+              By continuing you agree to our Terms of Service and Privacy
+              Policy.
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Normal onboarding flow ───────────────────────────────────────────────
+  const accentColor = currentStep?.accent ?? colors.accent;
+
+  return (
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: topPad + 16 },
+      ]}
+    >
+      {/* Progress dots */}
+      <View style={styles.dotsRow}>
+        {Array.from({ length: totalDots }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              {
+                backgroundColor:
+                  i <= step ? colors.foreground : colors.border,
+                width: i === step ? 28 : 8,
+              },
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* Content */}
+      <Animated.View style={[{ opacity: fadeAnim }, styles.contentWrap]}>
+        {!isAuthStep ? (
+          <View style={styles.slideContent}>
+            <View
+              style={[
+                styles.illustration,
+                {
+                  backgroundColor: accentColor + "18",
+                  borderRadius: colors.radius * 2,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.innerCircle,
+                  {
+                    backgroundColor: accentColor + "35",
+                    borderRadius: 88,
+                  },
+                ]}
+              >
+                <Text style={styles.stepIcon}>{currentStep.icon}</Text>
+              </View>
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              {currentStep.title}
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              {currentStep.subtitle}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.authContent}>
+            <Text style={[styles.authTitle, { color: colors.foreground }]}>
+              {"Let's get\nstarted."}
+            </Text>
+            <Text
+              style={[styles.authSubtitle, { color: colors.mutedForeground }]}
+            >
+              Create your account to save your wardrobe across devices.
+            </Text>
+
+            <View style={styles.authButtons}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: colors.radius,
+                    opacity: pressed ? 0.8 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.socialIcon,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  G
+                </Text>
+                <Text
+                  style={[
+                    styles.socialBtnText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Continue with Google
+                </Text>
+                <View style={styles.comingSoonBadge}>
+                  <Text style={styles.comingSoonText}>Soon</Text>
                 </View>
-                <View style={{ flex: 1.4 }}>
-                  <GenderPicker
-                    value={gender}
-                    onSelect={(v) => {
-                      setGender(v);
-                      setErrors((e) => ({ ...e, gender: "" }));
-                    }}
-                    colors={colors}
-                  />
-                  {errors.gender ? (
-                    <Text style={[styles.errorText, { color: colors.destructive }]}>
-                      {errors.gender}
-                    </Text>
-                  ) : null}
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  {
+                    backgroundColor: colors.secondary,
+                    borderColor: colors.border,
+                    borderRadius: colors.radius,
+                    opacity: pressed ? 0.8 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.socialIcon,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  
+                </Text>
+                <Text
+                  style={[
+                    styles.socialBtnText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Continue with Apple
+                </Text>
+                <View style={styles.comingSoonBadge}>
+                  <Text style={styles.comingSoonText}>Soon</Text>
                 </View>
+              </Pressable>
+
+              <View style={styles.dividerRow}>
+                <View
+                  style={[
+                    styles.dividerLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.dividerText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  or
+                </Text>
+                <View
+                  style={[
+                    styles.dividerLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
               </View>
 
-              {/* Submit */}
               <Pressable
-                onPress={handleCreateAccount}
+                onPress={() => setShowEmailForm(true)}
                 style={({ pressed }) => [
-                  styles.authBtn,
+                  styles.socialBtn,
                   {
                     backgroundColor: colors.foreground,
+                    borderColor: colors.foreground,
                     borderRadius: colors.radius,
                     opacity: pressed ? 0.85 : 1,
                     transform: [{ scale: pressed ? 0.97 : 1 }],
                   },
                 ]}
               >
-                <Text style={[styles.authBtnText, { color: colors.primaryForeground }]}>
-                  Create account
+                <Text
+                  style={[
+                    styles.socialIcon,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  ✉
+                </Text>
+                <Text
+                  style={[
+                    styles.socialBtnText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  Sign up with Email
                 </Text>
               </Pressable>
-
-              <Pressable onPress={() => setShowEmailForm(false)} style={styles.backLink}>
-                <Text style={[styles.backLinkText, { color: colors.mutedForeground }]}>
-                  ← Back
-                </Text>
-              </Pressable>
-            </ScrollView>
-          ) : (
-            /* ── Auth options ── */
-            <View style={styles.authContent}>
-              <Text style={[styles.authTitle, { color: colors.foreground }]}>
-                {"Let's get\nstarted."}
-              </Text>
-              <Text style={[styles.authSubtitle, { color: colors.mutedForeground }]}>
-                Create your account to save your wardrobe across devices.
-              </Text>
-
-              <View style={styles.authButtons}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      borderRadius: colors.radius,
-                      opacity: pressed ? 0.8 : 1,
-                      transform: [{ scale: pressed ? 0.97 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={[styles.socialIcon, { color: colors.mutedForeground }]}>G</Text>
-                  <Text style={[styles.socialBtnText, { color: colors.mutedForeground }]}>
-                    Continue with Google
-                  </Text>
-                  <View style={styles.comingSoonBadge}>
-                    <Text style={styles.comingSoonText}>Soon</Text>
-                  </View>
-                </Pressable>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    {
-                      backgroundColor: colors.secondary,
-                      borderColor: colors.border,
-                      borderRadius: colors.radius,
-                      opacity: pressed ? 0.8 : 1,
-                      transform: [{ scale: pressed ? 0.97 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={[styles.socialIcon, { color: colors.mutedForeground }]}>
-                    
-                  </Text>
-                  <Text style={[styles.socialBtnText, { color: colors.mutedForeground }]}>
-                    Continue with Apple
-                  </Text>
-                  <View style={styles.comingSoonBadge}>
-                    <Text style={styles.comingSoonText}>Soon</Text>
-                  </View>
-                </Pressable>
-
-                <View style={styles.dividerRow}>
-                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                  <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>or</Text>
-                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                </View>
-
-                <Pressable
-                  onPress={() => setShowEmailForm(true)}
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    {
-                      backgroundColor: colors.foreground,
-                      borderColor: colors.foreground,
-                      borderRadius: colors.radius,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: pressed ? 0.97 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={[styles.socialIcon, { color: colors.primaryForeground }]}>✉</Text>
-                  <Text style={[styles.socialBtnText, { color: colors.primaryForeground }]}>
-                    Sign up with Email
-                  </Text>
-                </Pressable>
-              </View>
             </View>
-          )}
-        </Animated.View>
+          </View>
+        )}
+      </Animated.View>
 
-        {/* Bottom */}
-        {!isAuthStep && (
-          <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
-            <Pressable
-              onPress={goNext}
-              style={({ pressed }) => [
-                styles.nextBtn,
-                {
-                  backgroundColor: colors.foreground,
-                  borderRadius: colors.radius,
-                  opacity: pressed ? 0.85 : 1,
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                },
-              ]}
+      {/* Bottom */}
+      {!isAuthStep && (
+        <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
+          <Pressable
+            onPress={goNext}
+            style={({ pressed }) => [
+              styles.nextBtn,
+              {
+                backgroundColor: colors.foreground,
+                borderRadius: colors.radius,
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.nextText, { color: colors.primaryForeground }]}
             >
-              <Text style={[styles.nextText, { color: colors.primaryForeground }]}>
-                {step === STEPS.length - 1 ? "Let's begin" : "Continue"}
-              </Text>
-            </Pressable>
-          </View>
-        )}
+              {step === STEPS.length - 1 ? "Let's begin" : "Continue"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
-        {isAuthStep && !showEmailForm && (
-          <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
-            <Pressable onPress={handleSignIn} style={styles.signInLink}>
-              <Text style={[styles.signInText, { color: colors.mutedForeground }]}>
-                Already have an account?{" "}
-                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
-                  Sign in
-                </Text>
+      {isAuthStep && (
+        <View style={[styles.bottom, { paddingBottom: botPad + 24 }]}>
+          <Pressable onPress={handleSignIn} style={styles.signInLink}>
+            <Text
+              style={[styles.signInText, { color: colors.mutedForeground }]}
+            >
+              Already have an account?{" "}
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                }}
+              >
+                Sign in
               </Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // ── Onboarding flow ──
   container: { flex: 1 },
   dotsRow: {
     flexDirection: "row",
@@ -567,15 +778,8 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   dot: { height: 8, borderRadius: 4 },
-  contentWrap: {
-    flex: 1,
-    paddingHorizontal: 28,
-  },
-  slideContent: {
-    flex: 1,
-    justifyContent: "center",
-    gap: 16,
-  },
+  contentWrap: { flex: 1, paddingHorizontal: 28 },
+  slideContent: { flex: 1, justifyContent: "center", gap: 16 },
   illustration: {
     height: 200,
     alignItems: "center",
@@ -601,11 +805,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 26,
   },
-  authContent: {
-    flex: 1,
-    justifyContent: "center",
-    gap: 20,
-  },
+  authContent: { flex: 1, justifyContent: "center", gap: 20 },
   authTitle: {
     fontSize: 38,
     fontWeight: "700",
@@ -624,7 +824,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 10,
     paddingHorizontal: 20,
   },
@@ -659,70 +858,8 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  formScroll: {
-    gap: 12,
-    paddingTop: 4,
-    paddingBottom: 40,
-  },
-  formTitle: {
-    fontSize: 30,
-    fontWeight: "700",
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.5,
-    marginBottom: 2,
-  },
-  formSubtitle: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  input: {
-    height: 54,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    borderWidth: 1.5,
-    fontFamily: "Inter_400Regular",
-  },
-  pickerBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  pickerBtnText: {
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
-    flex: 1,
-  },
-  errorText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 3,
-    marginLeft: 2,
-  },
-  authBtn: {
-    height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  authBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
-  backLink: { alignItems: "center", paddingVertical: 10 },
-  backLinkText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   bottom: { paddingHorizontal: 28 },
-  nextBtn: {
-    height: 58,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  nextBtn: { height: 58, alignItems: "center", justifyContent: "center" },
   nextText: {
     fontSize: 17,
     fontWeight: "600",
@@ -735,6 +872,106 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
+
+  // ── Full-screen form ──
+  formScreen: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    gap: 0,
+  },
+  backBtn: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+    marginBottom: 24,
+  },
+  backBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+  },
+  formHeader: {
+    gap: 6,
+    marginBottom: 32,
+  },
+  formTitle: {
+    fontSize: 34,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+  },
+  formSubtitle: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 22,
+  },
+  fields: {
+    flex: 1,
+    gap: 14,
+  },
+  row: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  input: {
+    height: 56,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    borderWidth: 1.5,
+    fontFamily: "Inter_400Regular",
+  },
+  passwordWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    height: "100%",
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+  },
+  eyeBtn: {
+    paddingLeft: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerBtnText: {
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+  },
+  errMsg: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 4,
+    marginLeft: 2,
+  },
+  formBottom: {
+    marginTop: 32,
+    gap: 16,
+  },
+  createBtn: {
+    height: 58,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createBtnText: {
+    fontSize: 17,
+    fontWeight: "600",
+    fontFamily: "Inter_600SemiBold",
+  },
+  termsText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  // ── Gender modal ──
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -768,7 +1005,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
-  modalOptionText: {
-    fontSize: 16,
-  },
+  modalOptionText: { fontSize: 16 },
 });
