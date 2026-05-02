@@ -27,9 +27,11 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const inOnboarding = segments[0] === "onboarding";
-    if (!isOnboarded && !inOnboarding) {
-      router.replace("/onboarding");
-    } else if (isOnboarded && inOnboarding) {
+    const inSplash = segments[0] === "splash";
+
+    if (!isOnboarded && !inOnboarding && !inSplash) {
+      router.replace("/splash");
+    } else if (isOnboarded && (inOnboarding || inSplash)) {
       router.replace("/(tabs)");
     }
   }, [isOnboarded, segments]);
@@ -41,7 +43,8 @@ function RootLayoutNav() {
   return (
     <ClosetProvider>
       <OnboardingGate>
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+          <Stack.Screen name="splash" options={{ headerShown: false, animation: "none" }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen
