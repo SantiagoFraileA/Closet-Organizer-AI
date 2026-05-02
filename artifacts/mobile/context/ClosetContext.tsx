@@ -22,6 +22,14 @@ export interface ClothingItem {
   addedAt: number;
 }
 
+export interface SavedLook {
+  id: string;
+  name: string;
+  imageThumb: string | null; // compressed full-outfit photo
+  itemNames: string[];
+  createdAt: number;
+}
+
 export interface Outfit {
   id: string;
   itemIds: string[];
@@ -48,11 +56,14 @@ interface ClosetContextValue {
   items: ClothingItem[];
   outfits: Outfit[];
   ratings: Rating[];
+  savedLooks: SavedLook[];
   profileName: string;
   userProfile: UserProfile | null;
   isOnboarded: boolean;
   addItem: (item: Omit<ClothingItem, "id" | "addedAt">) => void;
   removeItem: (id: string) => void;
+  addLook: (look: Omit<SavedLook, "id" | "createdAt">) => void;
+  removeLook: (id: string) => void;
   rateOutfit: (outfitId: string, rating: "like" | "dislike") => void;
   generateOutfits: (comfortZone?: boolean) => Outfit[];
   completeOnboarding: (profile: Omit<UserProfile, "id"> & { password: string }) => Promise<void>;
@@ -160,13 +171,7 @@ const SAMPLE_ITEMS: ClothingItem[] = [
 
 function colorHarmony(h1: string, h2: string): number {
   const neutrals = [
-    "#F5F0E8",
-    "#F0EFEB",
-    "#2D2926",
-    "#1C1917",
-    "#FFFFFF",
-    "#C4956A",
-    "#B8956A",
+    "#F5F0E8", "#F0EFEB", "#2D2926", "#1C1917", "#FFFFFF", "#C4956A", "#B8956A",
   ];
   if (neutrals.includes(h1) || neutrals.includes(h2)) return 0.88;
   if (h1 === h2) return 0.65;
@@ -218,6 +223,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
+  const [savedLooks, setSavedLooks] = useState<SavedLook[]>([]);
   const [profileName, setProfileNameState] = useState("");
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
   const [isOnboarded, setIsOnboarded] = useState(false);
@@ -226,10 +232,11 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [itemsStr, ratingsStr, tokenStr] = await Promise.all([
+        const [itemsStr, ratingsStr, tokenStr, looksStr] = await Promise.all([
           AsyncStorage.getItem("@cf_items"),
           AsyncStorage.getItem("@cf_ratings"),
           AsyncStorage.getItem("@cf_token"),
+          AsyncStorage.getItem("@cf_looks"),
         ]);
 
         const loadedItems = itemsStr ? JSON.parse(itemsStr) : SAMPLE_ITEMS;
@@ -238,6 +245,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         }
         setItems(loadedItems);
         if (ratingsStr) setRatings(JSON.parse(ratingsStr));
+        if (looksStr) setSavedLooks(JSON.parse(looksStr));
         setOutfits(buildOutfits(loadedItems, false));
 
         if (tokenStr) {
@@ -278,6 +286,23 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addLook = useCallback((data: Omit<SavedLook, "id" | "createdAt">) => {
+    const look: SavedLook = { ...data, id: makeId(), createdAt: Date.now() };
+    setSavedLooks((prev) => {
+      const next = [look, ...prev];
+      AsyncStorage.setItem("@cf_looks", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const removeLook = useCallback((id: string) => {
+    setSavedLooks((prev) => {
+      const next = prev.filter((l) => l.id !== id);
+      AsyncStorage.setItem("@cf_looks", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const rateOutfit = useCallback((outfitId: string, rating: "like" | "dislike") => {
     const newRating: Rating = { outfitId, rating, ratedAt: Date.now() };
     setRatings((prev) => {
@@ -298,24 +323,20 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
 
   const completeOnboarding = useCallback(
     async (profile: Omit<UserProfile, "id"> & { password: string }) => {
-      try {
-        const { token, user } = await api.register({
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          email: profile.email,
-          password: profile.password,
-          age: profile.age,
-          gender: profile.gender,
-        });
-        await AsyncStorage.setItem("@cf_token", token);
-        const up = userFromAuth(user);
-        const fullName = `${up.firstName} ${up.lastName}`.trim() || up.firstName || "Stylist";
-        setIsOnboarded(true);
-        setProfileNameState(fullName);
-        setUserProfileState(up);
-      } catch (err: any) {
-        throw err;
-      }
+      const { token, user } = await api.register({
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        password: profile.password,
+        age: profile.age,
+        gender: profile.gender,
+      });
+      await AsyncStorage.setItem("@cf_token", token);
+      const up = userFromAuth(user);
+      const fullName = `${up.firstName} ${up.lastName}`.trim() || up.firstName || "Stylist";
+      setIsOnboarded(true);
+      setProfileNameState(fullName);
+      setUserProfileState(up);
     },
     []
   );
@@ -359,11 +380,14 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         items,
         outfits,
         ratings,
+        savedLooks,
         profileName,
         userProfile,
         isOnboarded,
         addItem,
         removeItem,
+        addLook,
+        removeLook,
         rateOutfit,
         generateOutfits,
         completeOnboarding,
