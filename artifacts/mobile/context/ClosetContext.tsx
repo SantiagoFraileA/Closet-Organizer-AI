@@ -45,6 +45,7 @@ interface ClosetContextValue {
   generateOutfits: (comfortZone?: boolean) => Outfit[];
   completeOnboarding: (name: string) => void;
   setProfileName: (name: string) => void;
+  signOut: () => void;
 }
 
 const ClosetContext = createContext<ClosetContextValue | null>(null);
@@ -283,6 +284,12 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem("@cf_profile", JSON.stringify(name));
   }, []);
 
+  const signOut = useCallback(async () => {
+    await AsyncStorage.multiRemove(["@cf_onboarded", "@cf_profile"]);
+    setIsOnboarded(false);
+    setProfileNameState("");
+  }, []);
+
   if (!loaded) return null;
 
   return (
@@ -299,6 +306,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         generateOutfits,
         completeOnboarding,
         setProfileName,
+        signOut,
       }}
     >
       {children}

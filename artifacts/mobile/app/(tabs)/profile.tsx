@@ -25,7 +25,7 @@ const CATEGORY_LABELS: Record<ClothingCategory, string> = {
 export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { items, ratings, profileName, setProfileName } = useCloset();
+  const { items, ratings, profileName, setProfileName, signOut } = useCloset();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(profileName);
 
@@ -333,6 +333,27 @@ export default function ProfileScreen() {
             ))}
           </View>
         )}
+
+        {/* Sign out */}
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            signOut();
+          }}
+          style={({ pressed }) => [
+            styles.signOutBtn,
+            {
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
+        >
+          <Feather name="log-out" size={16} color={colors.mutedForeground} />
+          <Text style={[styles.signOutText, { color: colors.mutedForeground }]}>
+            Sign out
+          </Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -488,5 +509,19 @@ const styles = StyleSheet.create({
   colorCount: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
+  },
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 52,
+    borderWidth: 1.5,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  signOutText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
   },
 });
