@@ -97,7 +97,7 @@ export default function ExploreScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      {/* Header */}
+      {/* Sticky header */}
       <View
         style={[
           styles.header,
@@ -118,101 +118,110 @@ export default function ExploreScreen() {
         </View>
         <Pressable
           onPress={handleRefresh}
-          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          style={({ pressed }) => [
+            styles.refreshBtn,
+            {
+              backgroundColor: colors.secondary,
+              borderRadius: 20,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
         >
-          <Feather name="refresh-cw" size={20} color={colors.mutedForeground} />
+          <Feather name="refresh-cw" size={18} color={colors.foreground} />
         </Pressable>
       </View>
 
-      {/* Hero banner */}
-      <LinearGradient
-        colors={["#3730A3", "#1E3A5F"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.hero, { borderRadius: colors.radius, margin: 20, marginBottom: 4 }]}
+      {/* Single scrollable body */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollBody,
+          {
+            paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 90,
+          },
+        ]}
       >
-        <View style={styles.heroContent}>
-          <View style={styles.heroIcon}>
-            <Feather name="zap" size={28} color="#FFFFFF" />
+        {/* Hero banner */}
+        <LinearGradient
+          colors={["#3730A3", "#1E3A5F"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.hero, { borderRadius: colors.radius }]}
+        >
+          <View style={styles.heroContent}>
+            <View style={styles.heroIcon}>
+              <Feather name="zap" size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.heroTitle}>Comfort Zone Mode</Text>
+              <Text style={styles.heroSubtitle}>
+                Outfits that push boundaries and expand your style vocabulary.
+              </Text>
+            </View>
           </View>
-          <View style={styles.heroText}>
-            <Text style={styles.heroTitle}>Comfort Zone Mode</Text>
-            <Text style={styles.heroSubtitle}>
-              Outfits that push boundaries and expand your style vocabulary.
-            </Text>
+          <View style={styles.heroDots}>
+            {[0, 1, 2].map((i) => (
+              <View
+                key={i}
+                style={[
+                  styles.heroDot,
+                  { opacity: i === 0 ? 1 : 0.4, borderRadius: 4 },
+                ]}
+              />
+            ))}
           </View>
-        </View>
-        <View style={styles.heroDots}>
-          {[0, 1, 2].map((i) => (
+        </LinearGradient>
+
+        {/* Style insights row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.insightRow}
+        >
+          {[
+            { icon: "shuffle" as const, label: "Color Play", count: outfits.filter(o => o.isComfortZone).length },
+            { icon: "layers" as const, label: "New Combos", count: Math.floor(outfits.length * 1.3) },
+            { icon: "trending-up" as const, label: "Style Score", count: "Up 12%" },
+          ].map((stat, i) => (
             <View
               key={i}
               style={[
-                styles.heroDot,
-                { opacity: i === 0 ? 1 : 0.4, borderRadius: 4 },
+                styles.insightCard,
+                {
+                  backgroundColor: colors.secondary,
+                  borderRadius: colors.radius,
+                  borderColor: colors.border,
+                },
               ]}
-            />
-          ))}
-        </View>
-      </LinearGradient>
-
-      {/* Style insights row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.insightRow}
-      >
-        {[
-          { icon: "shuffle" as const, label: "Color Play", count: outfits.filter(o => o.isComfortZone).length },
-          { icon: "layers" as const, label: "New Combos", count: Math.floor(outfits.length * 1.3) },
-          { icon: "trending-up" as const, label: "Style Score", count: "Up 12%" },
-        ].map((stat, i) => (
-          <View
-            key={i}
-            style={[
-              styles.insightCard,
-              {
-                backgroundColor: colors.card,
-                borderRadius: colors.radius,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Feather name={stat.icon} size={18} color={colors.accent} />
-            <Text style={[styles.insightCount, { color: colors.foreground }]}>
-              {stat.count}
-            </Text>
-            <Text
-              style={[styles.insightLabel, { color: colors.mutedForeground }]}
             >
-              {stat.label}
-            </Text>
-          </View>
-        ))}
-      </ScrollView>
-
-      {/* Outfits list */}
-      {!hasCombos ? (
-        <EmptyState
-          icon="layers"
-          title="Need more items"
-          subtitle="Add tops and bottoms to unlock bold combination ideas."
-        />
-      ) : (
-        <ScrollView
-          contentContainerStyle={[
-            styles.list,
-            {
-              paddingBottom:
-                (Platform.OS === "web" ? 34 : insets.bottom) + 90,
-            },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {outfits.map((outfit) => (
-            <OutfitCard key={outfit.id} outfit={outfit} />
+              <Feather name={stat.icon} size={18} color={colors.accent} />
+              <Text style={[styles.insightCount, { color: colors.foreground }]}>
+                {stat.count}
+              </Text>
+              <Text
+                style={[styles.insightLabel, { color: colors.mutedForeground }]}
+              >
+                {stat.label}
+              </Text>
+            </View>
           ))}
         </ScrollView>
-      )}
+
+        {/* Outfits list */}
+        {!hasCombos ? (
+          <EmptyState
+            icon="layers"
+            title="Need more items"
+            subtitle="Add tops and bottoms to unlock bold combination ideas."
+          />
+        ) : (
+          <View style={styles.list}>
+            {outfits.map((outfit) => (
+              <OutfitCard key={outfit.id} outfit={outfit} />
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -238,8 +247,20 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scrollBody: {
+    paddingTop: 20,
+    gap: 0,
+  },
   hero: {
     padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 4,
   },
   heroContent: {
     flexDirection: "row",
@@ -302,7 +323,7 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 20,
     gap: 12,
-    paddingTop: 4,
+    paddingTop: 8,
   },
   outfitCard: {
     borderWidth: 1,
