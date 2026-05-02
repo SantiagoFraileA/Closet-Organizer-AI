@@ -308,7 +308,6 @@ export default function OutfitsScreen() {
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
-        scrollEnabled={deck.length === 0 || !canShow}
         showsVerticalScrollIndicator={false}
       >
         {/* AI Picks */}
@@ -378,7 +377,7 @@ const styles = StyleSheet.create({
   likeCountText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   modeToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
   modeText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  stackArea: { flex: 1, minHeight: 420, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, marginTop: 16 },
+  stackArea: { height: 420, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, marginTop: 16 },
   card: { position: "absolute", width: width - 40, borderWidth: 1, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4 },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", zIndex: 20 },
   likeOverlay: { backgroundColor: "#C4956AAA" },
