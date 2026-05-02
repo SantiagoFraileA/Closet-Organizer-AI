@@ -1,10 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -28,6 +28,7 @@ interface DetectedItem {
   style: StyleType;
   tags: string[];
   confirmed: boolean;
+  imageThumb: string | null; // base64 JPEG crop from server
 }
 
 const CATEGORIES: Array<{ key: ClothingCategory; label: string }> = [
@@ -62,14 +63,13 @@ const COLOR_PRESETS = [
 ];
 
 function getClosestPreset(hex: string) {
-  const best = COLOR_PRESETS.reduce(
+  return COLOR_PRESETS.reduce(
     (prev, c) => {
       const d = colorDist(hex, c.hex);
       return d < prev.dist ? { c, dist: d } : prev;
     },
     { c: COLOR_PRESETS[0], dist: Infinity }
-  );
-  return best.c;
+  ).c;
 }
 
 function colorDist(a: string, b: string) {
@@ -87,21 +87,6 @@ function makeId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
-/** Compress outfit photo → 200×200 JPEG quality 0.25 → base64 (~4-8 KB) */
-async function buildThumb(imageUri: string): Promise<string | null> {
-  if (Platform.OS === "web") return null;
-  try {
-    const result = await ImageManipulator.manipulateAsync(
-      imageUri,
-      [{ resize: { width: 200, height: 200 } }],
-      { compress: 0.25, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-    );
-    return result.base64 ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function ItemCard({
   item,
   index,
@@ -113,8 +98,6 @@ function ItemCard({
 }) {
   const colors = useColors();
   const [expanded, setExpanded] = useState(true);
-
-  const closestPreset = getClosestPreset(item.colorHex);
 
   return (
     <View
@@ -128,19 +111,25 @@ function ItemCard({
         },
       ]}
     >
-      <Pressable
-        onPress={() => setExpanded((e) => !e)}
-        style={styles.cardHeader}
-      >
+      {/* Header */}
+      <Pressable onPress={() => setExpanded((e) => !e)} style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
-          <View
-            style={[
-              styles.colorDot,
-              { backgroundColor: item.colorHex, borderColor: colors.border },
-            ]}
-          />
-          <View>
-            <Text style={[styles.cardName, { color: colors.foreground }]}>
+          {/* Thumbnail crop or color dot */}
+          {item.imageThumb ? (
+            <Image
+              source={{ uri: `data:image/jpeg;base64,${item.imageThumb}` }}
+              style={[styles.thumbImage, { borderRadius: 10, borderColor: colors.border }]}
+            />
+          ) : (
+            <View
+              style={[
+                styles.colorDot,
+                { backgroundColor: item.colorHex, borderColor: colors.border },
+              ]}
+            />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>
               {item.name}
             </Text>
             <Text style={[styles.cardMeta, { color: colors.mutedForeground }]}>
@@ -253,9 +242,7 @@ function ItemCard({
                 />
               ))}
             </View>
-            <Text style={[styles.colorName, { color: colors.mutedForeground }]}>
-              {item.color}
-            </Text>
+            <Text style={[styles.colorName, { color: colors.mutedForeground }]}>{item.color}</Text>
           </View>
 
           {/* Confirm button */}
@@ -301,7 +288,6 @@ export default function AnalyzeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DetectedItem[]>([]);
   const [saving, setSaving] = useState(false);
-  const [thumb, setThumb] = useState<string | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -314,24 +300,19 @@ export default function AnalyzeScreen() {
       setLoading(true);
       setError(null);
 
-      // Run analysis + thumbnail generation in parallel
-      const [res, generatedThumb] = await Promise.all([
-        fetch("/api/analyze-outfit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imageBase64: params.imageBase64,
-            mimeType: params.mimeType ?? "image/jpeg",
-          }),
+      const res = await fetch("/api/analyze-outfit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: params.imageBase64,
+          mimeType: params.mimeType ?? "image/jpeg",
         }),
-        buildThumb(params.imageUri),
-      ]);
-
-      setThumb(generatedThumb);
+      });
 
       const json = await res.json();
+
       if (!res.ok) {
-        setError(json.error ?? "Error analyzing the image");
+        setError(json.message ?? json.error ?? "Error analyzing the image");
         return;
       }
 
@@ -349,6 +330,7 @@ export default function AnalyzeScreen() {
           : "casual") as StyleType,
         tags: Array.isArray(item.tags) ? item.tags : [],
         confirmed: true,
+        imageThumb: item.imageThumb ?? null, // individual crop from server
       }));
 
       setItems(detected);
@@ -370,18 +352,13 @@ export default function AnalyzeScreen() {
     setSaving(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    // Build items with generated IDs
-    const itemsWithIds = toSave.map((item) => ({
-      ...item,
-      id: makeId(),
-      imageThumb: thumb,
-    }));
+    const itemsWithIds = toSave.map((item) => ({ ...item, id: makeId() }));
 
-    // 1. Save locally (AsyncStorage via context) — instant
+    // 1. Save locally (instant, offline-first)
     for (const item of itemsWithIds) {
       addItem({
         imageUri: params.imageUri ?? null,
-        imageThumb: item.imageThumb ?? null,
+        imageThumb: item.imageThumb,
         name: item.name,
         category: item.category,
         color: item.color,
@@ -390,7 +367,7 @@ export default function AnalyzeScreen() {
       });
     }
 
-    // 2. Persist to DB in background — fire & forget (don't block navigation)
+    // 2. Persist to DB in background
     api
       .saveItems(
         itemsWithIds.map((item) => ({
@@ -403,7 +380,7 @@ export default function AnalyzeScreen() {
           imageThumb: item.imageThumb,
         }))
       )
-      .catch((err) => console.warn("[analyze] Failed to persist items to DB:", err));
+      .catch((err) => console.warn("[analyze] DB persist failed:", err));
 
     router.replace("/(tabs)/");
   }
@@ -430,9 +407,7 @@ export default function AnalyzeScreen() {
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            AI Analysis
-          </Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>AI Analysis</Text>
           {!loading && items.length > 0 && (
             <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>
               {items.length} item{items.length !== 1 ? "s" : ""} detected
@@ -455,7 +430,7 @@ export default function AnalyzeScreen() {
             Analyzing your outfit...
           </Text>
           <Text style={[styles.loadingHint, { color: colors.mutedForeground }]}>
-            AI is identifying each garment
+            AI is identifying and cropping each garment
           </Text>
         </View>
       ) : error ? (
@@ -497,7 +472,7 @@ export default function AnalyzeScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={[styles.listHint, { color: colors.mutedForeground }]}>
-              Review each item detected by AI. Edit anything before adding to your closet.
+              Each garment is cropped individually. Edit anything before saving.
             </Text>
             {items.map((item, i) => (
               <ItemCard key={i} item={item} index={i} onChange={updateItem} />
@@ -589,7 +564,12 @@ const styles = StyleSheet.create({
   },
   cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   cardHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  colorDot: { width: 32, height: 32, borderRadius: 16, borderWidth: 1 },
+  thumbImage: {
+    width: 48,
+    height: 48,
+    borderWidth: 1,
+  },
+  colorDot: { width: 48, height: 48, borderRadius: 24, borderWidth: 1 },
   cardName: { fontSize: 15, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   cardMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   cardBody: { borderTopWidth: 1, padding: 16, gap: 16 },
