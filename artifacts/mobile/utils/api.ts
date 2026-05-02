@@ -1,13 +1,3 @@
-function getApiBaseUrl(): string {
-  if (typeof window !== "undefined" && window.location?.hostname) {
-    const hostname = window.location.hostname;
-    // Expo web: "abc.expo.kirk.replit.dev" → "abc.kirk.replit.dev"
-    const apiHostname = hostname.replace(/^([^.]+)\.expo\./, "$1.");
-    return `https://${apiHostname}/api`;
-  }
-  return (process.env.EXPO_PUBLIC_API_BASE_URL as string) ?? "http://localhost:8080/api";
-}
-
 export interface AuthUser {
   id: number;
   firstName: string;
@@ -22,9 +12,13 @@ export interface AuthResult {
   user: AuthUser;
 }
 
+// Always same-origin — Expo Router API routes live on the same server as the app
+function apiPath(path: string): string {
+  return `/api/auth${path}`;
+}
+
 async function post<T>(path: string, body: object, token?: string): Promise<T> {
-  const base = getApiBaseUrl();
-  const url = `${base}${path}`;
+  const url = apiPath(path);
   console.log("[api] POST", url);
 
   const headers: Record<string, string> = {
@@ -38,7 +32,6 @@ async function post<T>(path: string, body: object, token?: string): Promise<T> {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      credentials: "include", // send Replit auth cookies cross-origin
     });
   } catch (networkErr: any) {
     console.error("[api] network error:", networkErr);
@@ -52,15 +45,13 @@ async function post<T>(path: string, body: object, token?: string): Promise<T> {
 }
 
 async function get<T>(path: string, token: string): Promise<T> {
-  const base = getApiBaseUrl();
-  const url = `${base}${path}`;
+  const url = apiPath(path);
   console.log("[api] GET", url);
 
   let res: Response;
   try {
     res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
     });
   } catch (networkErr: any) {
     console.error("[api] network error:", networkErr);
@@ -80,10 +71,10 @@ export const api = {
     password: string;
     age: string;
     gender: string;
-  }) => post<AuthResult>("/auth/register", data),
+  }) => post<AuthResult>("/register", data),
 
   login: (email: string, password: string) =>
-    post<AuthResult>("/auth/login", { email, password }),
+    post<AuthResult>("/login", { email, password }),
 
-  me: (token: string) => get<{ user: AuthUser }>("/auth/me", token),
+  me: (token: string) => get<{ user: AuthUser }>("/me", token),
 };
