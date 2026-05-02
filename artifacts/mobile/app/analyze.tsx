@@ -26,9 +26,64 @@ import { api } from "@/utils/api";
 
 type StyleType = "casual" | "formal" | "streetwear" | "sport" | "bohemian" | "minimalist";
 
+const SUBCATEGORIES: Record<ClothingCategory, string[]> = {
+  tops:        ["Shirt", "T-Shirt", "Tank Top", "Hoodie", "Sweater", "Cardigan", "Blazer", "Jacket", "Coat"],
+  bottoms:     ["Jeans", "Trousers", "Shorts", "Skirt", "Leggings", "Sweatpants"],
+  shoes:       ["Sneakers", "Boots", "Loafers", "Sandals", "Heels", "Dress Shoes"],
+  accessories: ["Bag", "Belt", "Hat", "Watch", "Jewelry", "Sunglasses", "Scarf"],
+};
+
+function inferSubcategory(name: string, category: ClothingCategory): string {
+  const n = name.toLowerCase();
+  const map: Record<ClothingCategory, Array<[string[], string]>> = {
+    tops: [
+      [["blazer"],                        "Blazer"],
+      [["trench", "overcoat"],            "Coat"],
+      [["coat"],                          "Coat"],
+      [["jacket", "denim jack"],          "Jacket"],
+      [["hoodie", "sweatshirt"],          "Hoodie"],
+      [["cardigan"],                      "Cardigan"],
+      [["sweater", "pullover", "knit", "turtleneck", "knitwear"], "Sweater"],
+      [["tank", "sleeveless", "camisole","singlet"],              "Tank Top"],
+      [["t-shirt", "tshirt", "tee"],      "T-Shirt"],
+      [["shirt", "button", "oxford", "linen", "polo", "flannel"], "Shirt"],
+    ],
+    bottoms: [
+      [["jeans", "denim"],                "Jeans"],
+      [["shorts"],                        "Shorts"],
+      [["skirt"],                         "Skirt"],
+      [["leggings"],                      "Leggings"],
+      [["jogger", "sweatpant"],           "Sweatpants"],
+      [["trousers", "pants", "slacks", "chinos", "khaki"], "Trousers"],
+    ],
+    shoes: [
+      [["sneaker", "trainer", "runner"],  "Sneakers"],
+      [["boot", "chelsea", "combat"],     "Boots"],
+      [["loafer", "moccasin"],            "Loafers"],
+      [["sandal", "slide"],               "Sandals"],
+      [["heel", "pump", "stiletto"],      "Heels"],
+      [["oxford", "derby", "dress shoe"], "Dress Shoes"],
+    ],
+    accessories: [
+      [["bag", "backpack", "tote", "clutch", "purse", "satchel"], "Bag"],
+      [["belt"],                          "Belt"],
+      [["hat", "cap", "beanie", "fedora", "bucket hat"],          "Hat"],
+      [["watch"],                         "Watch"],
+      [["bracelet", "ring", "necklace", "earring", "chain"],      "Jewelry"],
+      [["sunglasses", "glasses"],         "Sunglasses"],
+      [["scarf", "shawl"],                "Scarf"],
+    ],
+  };
+  for (const [keywords, sub] of map[category]) {
+    if (keywords.some((k) => n.includes(k))) return sub;
+  }
+  return SUBCATEGORIES[category][0] ?? "";
+}
+
 interface DetectedItem {
   name: string;
   category: ClothingCategory;
+  subcategory: string;
   color: string;
   colorHex: string;
   style: StyleType;
@@ -340,9 +395,24 @@ function ItemCard({
             <Text style={[s.label, { color: colors.mutedForeground }]}>CATEGORY</Text>
             <View style={s.row}>
               {CATEGORIES.map(c => (
-                <Pressable key={c.key} onPress={() => { onChange(index, { category: c.key }); Haptics.selectionAsync(); }}
+                <Pressable key={c.key} onPress={() => {
+                  onChange(index, { category: c.key, subcategory: inferSubcategory(item.name, c.key) });
+                  Haptics.selectionAsync();
+                }}
                   style={[s.chip, { backgroundColor: item.category === c.key ? colors.foreground : colors.secondary, borderRadius: 8 }]}>
                   <Text style={[s.chipText, { color: item.category === c.key ? colors.primaryForeground : colors.mutedForeground }]}>{c.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={s.field}>
+            <Text style={[s.label, { color: colors.mutedForeground }]}>SUBCATEGORY</Text>
+            <View style={s.row}>
+              {SUBCATEGORIES[item.category].map(sub => (
+                <Pressable key={sub} onPress={() => { onChange(index, { subcategory: sub }); Haptics.selectionAsync(); }}
+                  style={[s.chip, { backgroundColor: item.subcategory === sub ? colors.accent : colors.secondary, borderRadius: 8 }]}>
+                  <Text style={[s.chipText, { color: item.subcategory === sub ? "#fff" : colors.mutedForeground }]}>{sub}</Text>
                 </Pressable>
               ))}
             </View>
@@ -413,16 +483,21 @@ export default function AnalyzeScreen() {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.message ?? json.error ?? "Error analyzing"); return; }
-      setItems((json.items ?? []).map((item: any) => ({
-        name: item.name ?? "Clothing item",
-        category: (["tops","bottoms","shoes","accessories"].includes(item.category) ? item.category : "tops") as ClothingCategory,
-        color: item.color ?? "Unknown",
-        colorHex: /^#[0-9A-Fa-f]{6}$/.test(item.colorHex) ? item.colorHex : getClosestPreset(item.colorHex ?? "#9E9E9E").hex,
-        style: (["casual","formal","streetwear","sport","bohemian","minimalist"].includes(item.style) ? item.style : "casual") as StyleType,
-        tags: Array.isArray(item.tags) ? item.tags : [],
-        confirmed: true,
-        imageThumb: item.imageThumb ?? null,
-      })));
+      setItems((json.items ?? []).map((item: any) => {
+        const cat = (["tops","bottoms","shoes","accessories"].includes(item.category) ? item.category : "tops") as ClothingCategory;
+        const name = item.name ?? "Clothing item";
+        return {
+          name,
+          category: cat,
+          subcategory: inferSubcategory(name, cat),
+          color: item.color ?? "Unknown",
+          colorHex: /^#[0-9A-Fa-f]{6}$/.test(item.colorHex) ? item.colorHex : getClosestPreset(item.colorHex ?? "#9E9E9E").hex,
+          style: (["casual","formal","streetwear","sport","bohemian","minimalist"].includes(item.style) ? item.style : "casual") as StyleType,
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          confirmed: true,
+          imageThumb: item.imageThumb ?? null,
+        };
+      }));
     } catch { setError("Connection error. Make sure the server is running."); }
     finally { setLoading(false); }
   }
@@ -441,7 +516,7 @@ export default function AnalyzeScreen() {
 
     // Save items locally
     for (const item of withIds) {
-      addItem({ imageUri: params.imageUri ?? null, imageThumb: item.imageThumb, name: item.name, category: item.category, color: item.color, colorHex: item.colorHex, tags: [...item.tags, item.style] });
+      addItem({ imageUri: params.imageUri ?? null, imageThumb: item.imageThumb, name: item.name, category: item.category, subcategory: item.subcategory, color: item.color, colorHex: item.colorHex, tags: [...item.tags, item.style] });
     }
 
     // Save outfit look (the full outfit composition)
