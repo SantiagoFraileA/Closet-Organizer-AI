@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   addBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   chipRow: { borderBottomWidth: 1, maxHeight: 52 },
   subRow: { borderBottomWidth: 1, maxHeight: 48 },
-  chipContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6, alignItems: "center" },
+  chipContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6, flexDirection: "row", alignItems: "center" },
   subChip: {
     flexDirection: "row",
     alignItems: "center",

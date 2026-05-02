@@ -44,13 +44,13 @@ export function CategoryChip({ label, selected, onPress }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
-    flex: 1,
     paddingVertical: 8,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   label: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
     textAlign: "center",
