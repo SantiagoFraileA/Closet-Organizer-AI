@@ -6,7 +6,6 @@ import {
   FlatList,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -80,12 +79,7 @@ export default function WardrobeScreen() {
       </View>
 
       {/* Category filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chips}
-        style={[styles.chipRow, { borderBottomColor: colors.border }]}
-      >
+      <View style={[styles.chipRow, { borderBottomColor: colors.border }]}>
         {CATEGORIES.map((c) => (
           <CategoryChip
             key={c.key}
@@ -94,7 +88,7 @@ export default function WardrobeScreen() {
             onPress={() => setActiveCategory(c.key)}
           />
         ))}
-      </ScrollView>
+      </View>
 
       {/* Grid */}
       {filtered.length === 0 ? (
@@ -159,12 +153,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipRow: {
+    flexDirection: "row",
     borderBottomWidth: 1,
-  },
-  chips: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 6,
   },
   grid: {
     paddingHorizontal: 10,
