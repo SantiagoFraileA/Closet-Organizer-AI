@@ -182,6 +182,7 @@ export default function OnboardingScreen() {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Sign-in fields
   const [signInEmail, setSignInEmail] = useState("");
@@ -237,16 +238,28 @@ export default function OnboardingScreen() {
     return errs;
   };
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    completeOnboarding({ firstName, lastName, email, age, gender });
-    router.replace("/(tabs)");
+    setIsSubmitting(true);
+    try {
+      await completeOnboarding({ firstName, lastName, email, password, age, gender });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      if (err?.error === "email_taken") {
+        setErrors({ email: "An account with this email already exists." });
+      } else {
+        setErrors({ email: "Something went wrong. Please try again." });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSignIn = async () => {
@@ -631,12 +644,13 @@ export default function OnboardingScreen() {
           <View style={styles.formBottom}>
             <Pressable
               onPress={handleCreateAccount}
+              disabled={isSubmitting}
               style={({ pressed }) => [
                 styles.createBtn,
                 {
                   backgroundColor: colors.foreground,
                   borderRadius: colors.radius,
-                  opacity: pressed ? 0.87 : 1,
+                  opacity: isSubmitting ? 0.6 : pressed ? 0.87 : 1,
                   transform: [{ scale: pressed ? 0.97 : 1 }],
                 },
               ]}
@@ -644,7 +658,7 @@ export default function OnboardingScreen() {
               <Text
                 style={[styles.createBtnText, { color: colors.primaryForeground }]}
               >
-                Create account
+                {isSubmitting ? "Creating account…" : "Create account"}
               </Text>
             </Pressable>
 

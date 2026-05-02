@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { api, type AuthUser } from "../utils/api";
 
 export type ClothingCategory = "tops" | "bottoms" | "shoes" | "accessories";
 
@@ -34,10 +35,10 @@ export interface Rating {
 }
 
 export interface UserProfile {
+  id?: number;
   firstName: string;
   lastName: string;
   email: string;
-  password: string;
   age: string;
   gender: string;
 }
@@ -53,7 +54,7 @@ interface ClosetContextValue {
   removeItem: (id: string) => void;
   rateOutfit: (outfitId: string, rating: "like" | "dislike") => void;
   generateOutfits: (comfortZone?: boolean) => Outfit[];
-  completeOnboarding: (profile: UserProfile) => void;
+  completeOnboarding: (profile: Omit<UserProfile, "id"> & { password: string }) => Promise<void>;
   signIn: (email: string, password: string) => Promise<"ok" | "wrong_password" | "not_found">;
   setProfileName: (name: string) => void;
   signOut: () => void;
@@ -163,10 +164,7 @@ function colorHarmony(h1: string, h2: string): number {
   return 0.72;
 }
 
-function buildOutfits(
-  items: ClothingItem[],
-  comfortZone: boolean
-): Outfit[] {
+function buildOutfits(items: ClothingItem[], comfortZone: boolean): Outfit[] {
   const tops = items.filter((i) => i.category === "tops");
   const bottoms = items.filter((i) => i.category === "bottoms");
   const shoes = items.filter((i) => i.category === "shoes");
@@ -180,10 +178,7 @@ function buildOutfits(
     bottoms.forEach((bottom) => {
       const score = colorHarmony(top.colorHex, bottom.colorHex);
       const shoe = shoes[Math.floor(Math.random() * Math.max(1, shoes.length))];
-      const acc =
-        accessories[
-          Math.floor(Math.random() * Math.max(1, accessories.length))
-        ];
+      const acc = accessories[Math.floor(Math.random() * Math.max(1, accessories.length))];
       const itemIds = [top.id, bottom.id];
       if (shoe) itemIds.push(shoe.id);
       if (acc) itemIds.push(acc.id);
@@ -192,16 +187,22 @@ function buildOutfits(
         ? Math.round((Math.random() * 0.25 + 0.55) * 100) / 100
         : Math.round(score * 100) / 100;
 
-      results.push({
-        id: makeId(),
-        itemIds,
-        styleScore,
-        isComfortZone: comfortZone,
-      });
+      results.push({ id: makeId(), itemIds, styleScore, isComfortZone: comfortZone });
     });
   });
 
   return results.sort(() => Math.random() - 0.5).slice(0, comfortZone ? 6 : 10);
+}
+
+function userFromAuth(u: AuthUser): UserProfile {
+  return {
+    id: u.id,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    email: u.email,
+    age: u.age,
+    gender: u.gender,
+  };
 }
 
 export function ClosetProvider({ children }: { children: React.ReactNode }) {
@@ -216,28 +217,31 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [itemsStr, ratingsStr, profileStr, onboardedStr, userProfileStr] =
-          await Promise.all([
-            AsyncStorage.getItem("@cf_items"),
-            AsyncStorage.getItem("@cf_ratings"),
-            AsyncStorage.getItem("@cf_profile"),
-            AsyncStorage.getItem("@cf_onboarded"),
-            AsyncStorage.getItem("@cf_user_profile"),
-          ]);
+        const [itemsStr, ratingsStr, tokenStr] = await Promise.all([
+          AsyncStorage.getItem("@cf_items"),
+          AsyncStorage.getItem("@cf_ratings"),
+          AsyncStorage.getItem("@cf_token"),
+        ]);
 
         const loadedItems = itemsStr ? JSON.parse(itemsStr) : SAMPLE_ITEMS;
         if (!itemsStr) {
-          await AsyncStorage.setItem(
-            "@cf_items",
-            JSON.stringify(SAMPLE_ITEMS)
-          );
+          await AsyncStorage.setItem("@cf_items", JSON.stringify(SAMPLE_ITEMS));
         }
         setItems(loadedItems);
         if (ratingsStr) setRatings(JSON.parse(ratingsStr));
-        if (profileStr) setProfileNameState(JSON.parse(profileStr));
-        if (userProfileStr) setUserProfileState(JSON.parse(userProfileStr));
-        setIsOnboarded(onboardedStr === "true");
         setOutfits(buildOutfits(loadedItems, false));
+
+        if (tokenStr) {
+          try {
+            const { user } = await api.me(tokenStr);
+            const profile = userFromAuth(user);
+            setUserProfileState(profile);
+            setProfileNameState(`${profile.firstName} ${profile.lastName}`.trim() || profile.firstName);
+            setIsOnboarded(true);
+          } catch {
+            await AsyncStorage.removeItem("@cf_token");
+          }
+        }
       } catch {
         setItems(SAMPLE_ITEMS);
         setOutfits(buildOutfits(SAMPLE_ITEMS, false));
@@ -265,17 +269,14 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const rateOutfit = useCallback(
-    (outfitId: string, rating: "like" | "dislike") => {
-      const newRating: Rating = { outfitId, rating, ratedAt: Date.now() };
-      setRatings((prev) => {
-        const next = [newRating, ...prev.filter((r) => r.outfitId !== outfitId)];
-        AsyncStorage.setItem("@cf_ratings", JSON.stringify(next));
-        return next;
-      });
-    },
-    []
-  );
+  const rateOutfit = useCallback((outfitId: string, rating: "like" | "dislike") => {
+    const newRating: Rating = { outfitId, rating, ratedAt: Date.now() };
+    setRatings((prev) => {
+      const next = [newRating, ...prev.filter((r) => r.outfitId !== outfitId)];
+      AsyncStorage.setItem("@cf_ratings", JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const generateOutfits = useCallback(
     (comfortZone = false): Outfit[] => {
@@ -286,41 +287,56 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     [items]
   );
 
-  const completeOnboarding = useCallback((profile: UserProfile) => {
-    const fullName = `${profile.firstName} ${profile.lastName}`.trim() || profile.firstName || "Stylist";
-    setIsOnboarded(true);
-    setProfileNameState(fullName);
-    setUserProfileState(profile);
-    AsyncStorage.setItem("@cf_onboarded", "true");
-    AsyncStorage.setItem("@cf_profile", JSON.stringify(fullName));
-    AsyncStorage.setItem("@cf_user_profile", JSON.stringify(profile));
-  }, []);
+  const completeOnboarding = useCallback(
+    async (profile: Omit<UserProfile, "id"> & { password: string }) => {
+      try {
+        const { token, user } = await api.register({
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email,
+          password: profile.password,
+          age: profile.age,
+          gender: profile.gender,
+        });
+        await AsyncStorage.setItem("@cf_token", token);
+        const up = userFromAuth(user);
+        const fullName = `${up.firstName} ${up.lastName}`.trim() || up.firstName || "Stylist";
+        setIsOnboarded(true);
+        setProfileNameState(fullName);
+        setUserProfileState(up);
+      } catch (err: any) {
+        throw err;
+      }
+    },
+    []
+  );
 
-  const signIn = useCallback(async (email: string, password: string): Promise<"ok" | "wrong_password" | "not_found"> => {
-    try {
-      const profileStr = await AsyncStorage.getItem("@cf_user_profile");
-      if (!profileStr) return "not_found";
-      const stored: UserProfile = JSON.parse(profileStr);
-      if (stored.email.toLowerCase() !== email.toLowerCase()) return "not_found";
-      if (stored.password !== password) return "wrong_password";
-      const fullName = `${stored.firstName} ${stored.lastName}`.trim() || stored.firstName || "Stylist";
-      setIsOnboarded(true);
-      setProfileNameState(fullName);
-      setUserProfileState(stored);
-      await AsyncStorage.setItem("@cf_onboarded", "true");
-      return "ok";
-    } catch {
-      return "not_found";
-    }
-  }, []);
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<"ok" | "wrong_password" | "not_found"> => {
+      try {
+        const { token, user } = await api.login(email, password);
+        await AsyncStorage.setItem("@cf_token", token);
+        const up = userFromAuth(user);
+        const fullName = `${up.firstName} ${up.lastName}`.trim() || up.firstName || "Stylist";
+        setIsOnboarded(true);
+        setProfileNameState(fullName);
+        setUserProfileState(up);
+        return "ok";
+      } catch (err: any) {
+        if (err?.error === "wrong_password") return "wrong_password";
+        if (err?.error === "not_found" || err?.status === 404) return "not_found";
+        return "not_found";
+      }
+    },
+    []
+  );
 
   const setProfileName = useCallback((name: string) => {
     setProfileNameState(name);
-    AsyncStorage.setItem("@cf_profile", JSON.stringify(name));
   }, []);
 
   const signOut = useCallback(async () => {
-    await AsyncStorage.multiRemove(["@cf_onboarded", "@cf_profile", "@cf_user_profile"]);
+    await AsyncStorage.multiRemove(["@cf_token"]);
     setIsOnboarded(false);
     setProfileNameState("");
     setUserProfileState(null);
