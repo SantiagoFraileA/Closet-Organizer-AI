@@ -332,8 +332,8 @@ export default function OutfitsScreen() {
             style={({ pressed }) => [
               styles.actionBtn,
               {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
+                backgroundColor: colors.destructive + "15",
+                borderColor: colors.destructive + "50",
                 borderRadius: 36,
                 opacity: pressed ? 0.8 : 1,
               },
@@ -360,14 +360,14 @@ export default function OutfitsScreen() {
             style={({ pressed }) => [
               styles.actionBtn,
               {
-                backgroundColor: colors.card,
+                backgroundColor: colors.secondary,
                 borderColor: colors.border,
                 borderRadius: 36,
                 opacity: pressed ? 0.8 : 1,
               },
             ]}
           >
-            <Feather name="refresh-cw" size={24} color={colors.mutedForeground} />
+            <Feather name="refresh-cw" size={24} color={colors.foreground} />
           </Pressable>
         </View>
       )}
@@ -507,12 +507,7 @@ const styles = StyleSheet.create({
     height: 60,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1.5,
   },
   likeBtn: {
     width: 76,
