@@ -1,6 +1,19 @@
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  "https://91ef58e2-307e-4154-9d23-8f995ffb2193-00-k3f2p5wc6txn.kirk.replit.dev/api";
+function getApiBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    const hostname = window.location.hostname;
+    // Replit Expo web: hostname looks like "abc123.expo.kirk.replit.dev"
+    // API server lives at "abc123.kirk.replit.dev/api"
+    const apiHostname = hostname.replace(/^([^.]+)\.expo\./, "$1.");
+    return `https://${apiHostname}/api`;
+  }
+  // Native / fallback
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL ??
+    "http://localhost:8080/api"
+  );
+}
+
+const BASE_URL = getApiBaseUrl();
 
 export interface AuthUser {
   id: number;

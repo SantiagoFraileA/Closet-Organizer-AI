@@ -251,10 +251,13 @@ export default function OnboardingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } catch (err: any) {
+      console.error("register error", JSON.stringify(err));
       if (err?.error === "email_taken") {
         setErrors({ email: "An account with this email already exists." });
+      } else if (err?.message) {
+        setErrors({ email: `Error: ${err.message}` });
       } else {
-        setErrors({ email: "Something went wrong. Please try again." });
+        setErrors({ email: `Error: ${JSON.stringify(err)}` });
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
