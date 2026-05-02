@@ -1,19 +1,12 @@
 function getApiBaseUrl(): string {
   if (typeof window !== "undefined" && window.location?.hostname) {
     const hostname = window.location.hostname;
-    // Replit Expo web: hostname looks like "abc123.expo.kirk.replit.dev"
-    // API server lives at "abc123.kirk.replit.dev/api"
+    // Expo web: "abc.expo.kirk.replit.dev" → "abc.kirk.replit.dev"
     const apiHostname = hostname.replace(/^([^.]+)\.expo\./, "$1.");
     return `https://${apiHostname}/api`;
   }
-  // Native / fallback
-  return (
-    process.env.EXPO_PUBLIC_API_BASE_URL ??
-    "http://localhost:8080/api"
-  );
+  return (process.env.EXPO_PUBLIC_API_BASE_URL as string) ?? "http://localhost:8080/api";
 }
-
-const BASE_URL = getApiBaseUrl();
 
 export interface AuthUser {
   id: number;
@@ -30,22 +23,50 @@ export interface AuthResult {
 }
 
 async function post<T>(path: string, body: object, token?: string): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const base = getApiBaseUrl();
+  const url = `${base}${path}`;
+  console.log("[api] POST", url);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include", // send Replit auth cookies cross-origin
+    });
+  } catch (networkErr: any) {
+    console.error("[api] network error:", networkErr);
+    throw { error: "network_error", message: networkErr?.message ?? String(networkErr) };
+  }
+
   const json = await res.json();
+  console.log("[api] response", res.status, JSON.stringify(json));
   if (!res.ok) throw { status: res.status, error: json.error ?? "unknown_error" };
   return json as T;
 }
 
 async function get<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const base = getApiBaseUrl();
+  const url = `${base}${path}`;
+  console.log("[api] GET", url);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    });
+  } catch (networkErr: any) {
+    console.error("[api] network error:", networkErr);
+    throw { error: "network_error", message: networkErr?.message ?? String(networkErr) };
+  }
+
   const json = await res.json();
   if (!res.ok) throw { status: res.status, error: json.error ?? "unknown_error" };
   return json as T;
