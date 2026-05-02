@@ -630,39 +630,6 @@ export default function OnboardingScreen() {
                 </View>
               </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.socialBtn,
-                  {
-                    backgroundColor: colors.secondary,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius,
-                    opacity: pressed ? 0.8 : 1,
-                    transform: [{ scale: pressed ? 0.97 : 1 }],
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.socialIcon,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  
-                </Text>
-                <Text
-                  style={[
-                    styles.socialBtnText,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  Continue with Apple
-                </Text>
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Soon</Text>
-                </View>
-              </Pressable>
-
               <View style={styles.dividerRow}>
                 <View
                   style={[
