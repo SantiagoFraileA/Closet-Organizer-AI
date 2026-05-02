@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AIPicks } from "@/components/AIPicks";
 import { EmptyState } from "@/components/EmptyState";
 import { OutfitItemRow } from "@/components/OutfitItemRow";
 import { Outfit, SavedLook, useCloset } from "@/context/ClosetContext";
@@ -310,6 +311,9 @@ export default function OutfitsScreen() {
         scrollEnabled={deck.length === 0 || !canShow}
         showsVerticalScrollIndicator={false}
       >
+        {/* AI Picks */}
+        <AIPicks />
+
         {/* My Looks strip */}
         <LooksStrip />
 
