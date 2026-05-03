@@ -43,10 +43,9 @@ export function CategoryChip({ label, selected, onPress }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
+    flex: 1,
     height: 34,
     borderRadius: 17,
-    paddingHorizontal: 16,
-    marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
   },

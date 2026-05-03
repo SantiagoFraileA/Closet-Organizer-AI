@@ -93,11 +93,8 @@ export default function WardrobeScreen() {
       </View>
 
       {/* Main category filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
+      <View
         style={[styles.chipRow, { borderBottomColor: subcats.length ? "transparent" : colors.border }]}
-        contentContainerStyle={styles.chipContent}
       >
         {CATEGORIES.map((c) => (
           <CategoryChip
@@ -107,7 +104,7 @@ export default function WardrobeScreen() {
             onPress={() => selectCategory(c.key)}
           />
         ))}
-      </ScrollView>
+      </View>
 
       {/* Subcategory filter — appears when a main category is selected */}
       {subcats.length > 0 && (
@@ -211,7 +208,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "700", fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  chipRow: { height: 54, borderBottomWidth: StyleSheet.hairlineWidth },
+  chipRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth },
   subRow: { height: 50, borderBottomWidth: StyleSheet.hairlineWidth },
   chipContent: { paddingHorizontal: 16, flexDirection: "row", alignItems: "center" },
   subChip: {
