@@ -140,13 +140,17 @@ export default function ItemDetailScreen() {
         ]}
       >
         {/* Image / color block */}
-        {item.imageUri ? (
+        {item.imageThumb ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${item.imageThumb}` }}
+            style={[styles.image, { borderRadius: colors.radius }]}
+            resizeMode="cover"
+          />
+        ) : item.imageUri ? (
           <Image
             source={{ uri: item.imageUri }}
-            style={[
-              styles.image,
-              { borderRadius: colors.radius },
-            ]}
+            style={[styles.image, { borderRadius: colors.radius }]}
+            resizeMode="cover"
           />
         ) : (
           <View
