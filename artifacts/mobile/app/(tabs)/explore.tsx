@@ -75,8 +75,33 @@ function OutfitCard({ outfit }: { outfit: Outfit }) {
 export default function ExploreScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { items, generateOutfits } = useCloset();
+  const { items, ratings, generateOutfits } = useCloset();
   const [outfits, setOutfits] = useState<Outfit[]>([]);
+
+  // ── Dynamic stats ──────────────────────────────────────────────────────────
+  const topsCount = items.filter(i => i.category === "tops").length;
+  const bottomsCount = items.filter(i => i.category === "bottoms").length;
+  const totalCombos = topsCount * bottomsCount;
+
+  const likedCount = ratings.filter(r => r.rating === "like").length;
+  const dislikedCount = ratings.filter(r => r.rating === "dislike").length;
+  const totalRated = likedCount + dislikedCount;
+
+  let styleScoreLabel: string;
+  let styleScoreIcon: "trending-up" | "trending-down" | "minus" = "minus";
+  if (totalRated >= 3) {
+    const likeRate = likedCount / totalRated;
+    const diff = Math.round((likeRate - 0.6) * 100);
+    styleScoreLabel = diff > 0 ? `Up ${diff}%` : diff < 0 ? `Down ${Math.abs(diff)}%` : "Steady";
+    styleScoreIcon = diff >= 0 ? "trending-up" : "trending-down";
+  } else if (outfits.length > 0) {
+    const avg = outfits.reduce((s, o) => s + o.styleScore, 0) / outfits.length;
+    const diff = Math.round((avg - 0.75) * 100);
+    styleScoreLabel = diff > 0 ? `Up ${diff}%` : diff < 0 ? `Down ${Math.abs(diff)}%` : "Steady";
+    styleScoreIcon = diff >= 0 ? "trending-up" : "trending-down";
+  } else {
+    styleScoreLabel = "—";
+  }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -179,9 +204,9 @@ export default function ExploreScreen() {
           contentContainerStyle={styles.insightRow}
         >
           {[
-            { icon: "shuffle" as const, label: "Color Play", count: outfits.filter(o => o.mode === "bold").length },
-            { icon: "layers" as const, label: "New Combos", count: Math.floor(outfits.length * 1.3) },
-            { icon: "trending-up" as const, label: "Style Score", count: "Up 12%" },
+            { icon: "shuffle" as const, label: "Bold Picks", count: outfits.length },
+            { icon: "layers" as const, label: "Combos", count: totalCombos || "—" },
+            { icon: styleScoreIcon, label: "Style Score", count: styleScoreLabel },
           ].map((stat, i) => (
             <View
               key={i}
