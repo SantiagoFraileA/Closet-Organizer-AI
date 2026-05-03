@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +16,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { OutfitItemRow } from "@/components/OutfitItemRow";
 import { Outfit, useCloset } from "@/context/ClosetContext";
 import { useColors } from "@/hooks/useColors";
+
+interface ClosetAnalysis {
+  score: number;
+  trend: string;
+  missing: string[];
+  tip: string;
+}
 
 function OutfitCard({ outfit }: { outfit: Outfit }) {
   const colors = useColors();
@@ -75,40 +83,45 @@ function OutfitCard({ outfit }: { outfit: Outfit }) {
 export default function ExploreScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { items, ratings, generateOutfits } = useCloset();
+  const { items, generateOutfits } = useCloset();
   const [outfits, setOutfits] = useState<Outfit[]>([]);
+  const [analysis, setAnalysis] = useState<ClosetAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Dynamic stats ──────────────────────────────────────────────────────────
   const topsCount = items.filter(i => i.category === "tops").length;
   const bottomsCount = items.filter(i => i.category === "bottoms").length;
   const totalCombos = topsCount * bottomsCount;
 
-  const likedCount = ratings.filter(r => r.rating === "like").length;
-  const dislikedCount = ratings.filter(r => r.rating === "dislike").length;
-  const totalRated = likedCount + dislikedCount;
-
-  let styleScoreLabel: string;
-  let styleScoreIcon: "trending-up" | "trending-down" | "minus" = "minus";
-  if (totalRated >= 3) {
-    const likeRate = likedCount / totalRated;
-    const diff = Math.round((likeRate - 0.6) * 100);
-    styleScoreLabel = diff > 0 ? `Up ${diff}%` : diff < 0 ? `Down ${Math.abs(diff)}%` : "Steady";
-    styleScoreIcon = diff >= 0 ? "trending-up" : "trending-down";
-  } else if (outfits.length > 0) {
-    const avg = outfits.reduce((s, o) => s + o.styleScore, 0) / outfits.length;
-    const diff = Math.round((avg - 0.75) * 100);
-    styleScoreLabel = diff > 0 ? `Up ${diff}%` : diff < 0 ? `Down ${Math.abs(diff)}%` : "Steady";
-    styleScoreIcon = diff >= 0 ? "trending-up" : "trending-down";
-  } else {
-    styleScoreLabel = "—";
-  }
-
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
+  // Debounced AI analysis — re-runs when closet changes, with 1.5s delay
   useEffect(() => {
-    if (items.length > 1) {
-      setOutfits(generateOutfits("bold"));
-    }
+    if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+    analysisTimerRef.current = setTimeout(async () => {
+      setAnalysisLoading(true);
+      try {
+        const res = await fetch("/api/closet-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: items.map(i => ({
+              name: i.name,
+              category: i.category,
+              subcategory: i.subcategory,
+              color: i.color,
+            })),
+          }),
+        });
+        if (res.ok) setAnalysis(await res.json());
+      } catch { /* silent — show nothing if offline */ }
+      finally { setAnalysisLoading(false); }
+    }, 1500);
+    return () => { if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current); };
+  }, [items.length]);
+
+  useEffect(() => {
+    if (items.length > 1) setOutfits(generateOutfits("bold"));
   }, [items.length]);
 
   const handleRefresh = () => {
@@ -197,40 +210,89 @@ export default function ExploreScreen() {
           </View>
         </LinearGradient>
 
-        {/* Style insights row */}
+        {/* Stats row */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.insightRow}
         >
           {[
-            { icon: "shuffle" as const, label: "Bold Picks", count: outfits.length },
-            { icon: "layers" as const, label: "Combos", count: totalCombos || "—" },
-            { icon: styleScoreIcon, label: "Style Score", count: styleScoreLabel },
+            { icon: "zap" as const,    label: "Bold Picks", count: outfits.length || "—" },
+            { icon: "layers" as const, label: "Combos",     count: totalCombos  || "—" },
+            { icon: analysisLoading ? "loader" as const : (analysis ? "trending-up" as const : "bar-chart-2" as const),
+              label: "AI Score",
+              count: analysisLoading ? "…" : analysis ? `${analysis.score}` : "—" },
           ].map((stat, i) => (
             <View
               key={i}
               style={[
                 styles.insightCard,
-                {
-                  backgroundColor: colors.secondary,
-                  borderRadius: colors.radius,
-                  borderColor: colors.border,
-                },
+                { backgroundColor: colors.secondary, borderRadius: colors.radius, borderColor: colors.border },
               ]}
             >
               <Feather name={stat.icon} size={18} color={colors.accent} />
-              <Text style={[styles.insightCount, { color: colors.foreground }]}>
-                {stat.count}
-              </Text>
-              <Text
-                style={[styles.insightLabel, { color: colors.mutedForeground }]}
-              >
-                {stat.label}
-              </Text>
+              <Text style={[styles.insightCount, { color: colors.foreground }]}>{stat.count}</Text>
+              <Text style={[styles.insightLabel, { color: colors.mutedForeground }]}>{stat.label}</Text>
             </View>
           ))}
         </ScrollView>
+
+        {/* AI Closet Analysis card */}
+        {(analysis || analysisLoading) && (
+          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
+            {/* Header */}
+            <View style={styles.aiHeader}>
+              <View style={[styles.aiIconWrap, { backgroundColor: colors.accent + "18" }]}>
+                <Feather name="cpu" size={14} color={colors.accent} />
+              </View>
+              <Text style={[styles.aiTitle, { color: colors.foreground }]}>AI Closet Analysis</Text>
+              {analysisLoading && <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: "auto" }} />}
+              {!analysisLoading && analysis && (
+                <View style={[styles.trendPill, { backgroundColor: Number(analysis.trend) >= 0 ? "#2D6A4F18" : "#E0525218", marginLeft: "auto" }]}>
+                  <Feather name={Number(analysis.trend) >= 0 ? "trending-up" : "trending-down"} size={11} color={Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252"} />
+                  <Text style={[styles.trendText, { color: Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252" }]}>
+                    {Number(analysis.trend) > 0 ? `+${analysis.trend}` : analysis.trend} vs ideal
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {analysis && !analysisLoading && (
+              <>
+                {/* Score bar */}
+                <View style={styles.scoreBarWrap}>
+                  <View style={[styles.scoreBarBg, { backgroundColor: colors.secondary }]}>
+                    <View style={[styles.scoreBarFill, { width: `${analysis.score}%` as any, backgroundColor: analysis.score >= 70 ? "#2D6A4F" : analysis.score >= 50 ? colors.accent : "#E05252" }]} />
+                  </View>
+                  <Text style={[styles.scoreNum, { color: colors.foreground }]}>{analysis.score}<Text style={[styles.scoreOf, { color: colors.mutedForeground }]}>/100</Text></Text>
+                </View>
+
+                {/* Missing basics */}
+                {analysis.missing.length > 0 && (
+                  <View style={styles.missingSection}>
+                    <Text style={[styles.missingLabel, { color: colors.mutedForeground }]}>BÁSICOS QUE TE FALTAN</Text>
+                    <View style={styles.missingPills}>
+                      {analysis.missing.map((item, i) => (
+                        <View key={i} style={[styles.missingPill, { backgroundColor: "#E05252" + "14", borderColor: "#E05252" + "40" }]}>
+                          <Feather name="plus-circle" size={11} color="#E05252" />
+                          <Text style={[styles.missingPillText, { color: "#E05252" }]}>{item}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Tip */}
+                {analysis.tip ? (
+                  <View style={[styles.tipRow, { backgroundColor: colors.accent + "10", borderRadius: 8 }]}>
+                    <Feather name="star" size={13} color={colors.accent} />
+                    <Text style={[styles.tipText, { color: colors.foreground }]}>{analysis.tip}</Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+          </View>
+        )}
 
         {/* Outfits list */}
         {!hasCombos ? (
@@ -346,6 +408,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_400Regular",
   },
+  aiCard: { borderWidth: 1, padding: 16, gap: 12, marginTop: 4 },
+  aiHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  aiIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  aiTitle: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  trendPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  trendText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  scoreBarWrap: { flexDirection: "row", alignItems: "center", gap: 10 },
+  scoreBarBg: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
+  scoreBarFill: { height: "100%", borderRadius: 4 },
+  scoreNum: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold", minWidth: 52, textAlign: "right" },
+  scoreOf: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  missingSection: { gap: 8 },
+  missingLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.6 },
+  missingPills: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  missingPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  missingPillText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  tipRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10 },
+  tipText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   list: {
     paddingHorizontal: 20,
     gap: 12,
