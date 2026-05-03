@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { ClothingCategory, ClothingItem } from "@/context/ClosetContext";
 
@@ -40,21 +40,29 @@ export function ClothingCard({ item, onPress }: Props) {
         },
       ]}
     >
-      <View
-        style={[
-          styles.colorBlock,
-          {
-            backgroundColor: item.colorHex,
-            borderRadius: colors.radius - 4,
-          },
-        ]}
-      >
-        <Feather
-          name={CATEGORY_ICONS[item.category]}
-          size={24}
-          color={isLight(item.colorHex) ? "#1C1917" : "#FFFFFF"}
+      {item.imageThumb ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${item.imageThumb}` }}
+          style={[styles.colorBlock, { borderRadius: colors.radius - 4 }]}
+          resizeMode="cover"
         />
-      </View>
+      ) : (
+        <View
+          style={[
+            styles.colorBlock,
+            {
+              backgroundColor: item.colorHex,
+              borderRadius: colors.radius - 4,
+            },
+          ]}
+        >
+          <Feather
+            name={CATEGORY_ICONS[item.category]}
+            size={24}
+            color={isLight(item.colorHex) ? "#1C1917" : "#FFFFFF"}
+          />
+        </View>
+      )}
       <View style={styles.info}>
         <Text
           style={[styles.name, { color: colors.foreground }]}
