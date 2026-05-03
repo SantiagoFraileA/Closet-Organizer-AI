@@ -108,60 +108,61 @@ export default function WardrobeScreen() {
 
       {/* Subcategory filter — appears when a main category is selected */}
       {subcats.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.subRow, { borderBottomColor: colors.border }]}
-          contentContainerStyle={styles.chipContent}
-        >
-          {subcats.map((sub) => {
-            const count = categoryItems.filter(
-              (i) => i.subcategory?.toLowerCase() === sub.toLowerCase()
-            ).length;
-            const active = activeSubcategory === sub;
-            return (
-              <Pressable
-                key={sub}
-                onPress={() => selectSubcategory(sub)}
-                style={[
-                  styles.subChip,
-                  {
-                    backgroundColor: active ? colors.accent : colors.secondary,
-                    borderColor: active ? colors.accent : colors.border,
-                    borderRadius: 20,
-                  },
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
+        <View style={[styles.subRow, { borderBottomColor: colors.border }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipContent}
+          >
+            {subcats.map((sub) => {
+              const count = categoryItems.filter(
+                (i) => i.subcategory?.toLowerCase() === sub.toLowerCase()
+              ).length;
+              const active = activeSubcategory === sub;
+              return (
+                <Pressable
+                  key={sub}
+                  onPress={() => selectSubcategory(sub)}
                   style={[
-                    styles.subChipText,
-                    { color: active ? "#fff" : colors.mutedForeground },
+                    styles.subChip,
+                    {
+                      backgroundColor: active ? colors.accent : colors.secondary,
+                      borderColor: active ? colors.accent : colors.border,
+                      borderRadius: 20,
+                    },
                   ]}
                 >
-                  {sub}
-                </Text>
-                {count > 0 && (
-                  <View
+                  <Text
+                    numberOfLines={1}
                     style={[
-                      styles.subChipBadge,
-                      { backgroundColor: active ? "rgba(255,255,255,0.3)" : colors.border },
+                      styles.subChipText,
+                      { color: active ? "#fff" : colors.mutedForeground },
                     ]}
                   >
-                    <Text
+                    {sub}
+                  </Text>
+                  {count > 0 && (
+                    <View
                       style={[
-                        styles.subChipBadgeText,
-                        { color: active ? "#fff" : colors.mutedForeground },
+                        styles.subChipBadge,
+                        { backgroundColor: active ? "rgba(255,255,255,0.3)" : colors.border },
                       ]}
                     >
-                      {count}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                      <Text
+                        style={[
+                          styles.subChipBadgeText,
+                          { color: active ? "#fff" : colors.mutedForeground },
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
 
       {/* Grid */}
@@ -210,8 +211,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   chipRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth },
-  subRow: { height: 48, borderBottomWidth: StyleSheet.hairlineWidth },
-  chipContent: { paddingHorizontal: 12, alignItems: "center" },
+  subRow: { height: 48, overflow: "hidden", borderBottomWidth: StyleSheet.hairlineWidth },
+  chipContent: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12 },
   subChip: {
     flexDirection: "row",
     alignItems: "center",
