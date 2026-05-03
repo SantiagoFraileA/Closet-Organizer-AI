@@ -1,9 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -17,11 +16,54 @@ import { OutfitItemRow } from "@/components/OutfitItemRow";
 import { Outfit, useCloset } from "@/context/ClosetContext";
 import { useColors } from "@/hooks/useColors";
 
-interface ClosetAnalysis {
+interface ClosetScore {
   score: number;
-  trend: string;
   missing: string[];
   tip: string;
+}
+
+function computeClosetScore(items: import("@/context/ClosetContext").ClothingItem[]): ClosetScore {
+  const tops       = items.filter(i => i.category === "tops");
+  const bottoms    = items.filter(i => i.category === "bottoms");
+  const shoes      = items.filter(i => i.category === "shoes");
+  const colors     = items.map(i => (i.color ?? "").toLowerCase());
+
+  const hasColor = (c: string) => colors.some(col => col.includes(c));
+
+  let score = 0;
+  const missing: string[] = [];
+
+  // Tops — 25 pts max (5 items × 5)
+  score += Math.min(tops.length, 5) * 5;
+  if (tops.length < 3) missing.push("Más tops básicos");
+
+  // Bottoms — 25 pts max (5 items × 5)
+  score += Math.min(bottoms.length, 5) * 5;
+  if (bottoms.length < 3) missing.push("Más pantalones versátiles");
+
+  // Shoes — 20 pts max (2 items × 10)
+  score += Math.min(shoes.length, 2) * 10;
+  if (shoes.length === 0) missing.push("Tenis o zapatos básicos");
+
+  // Neutral colors — 20 pts max (4 neutrals × 5)
+  const neutrals = ["white", "blanco", "black", "negro", "grey", "gray", "gris", "beige", "navy", "azul marino", "cream", "crema"];
+  const neutralHits = new Set(neutrals.filter(n => hasColor(n))).size;
+  score += Math.min(neutralHits, 4) * 5;
+  if (!hasColor("white") && !hasColor("blanco")) missing.push("Top o playera blanca");
+  if (!hasColor("black") && !hasColor("negro"))  missing.push("Prenda negra básica");
+
+  // Balance bonus — 10 pts
+  const diff = Math.abs(tops.length - bottoms.length);
+  if (diff <= 1)      score += 10;
+  else if (diff <= 3) score += 5;
+
+  score = Math.min(score, 100);
+
+  const tip = missing.length === 0
+    ? "¡Excelente closet! Sigue agregando variedad para más creatividad."
+    : `Agrega ${missing[0].toLowerCase()} para multiplicar tus outfits posibles.`;
+
+  return { score, missing, tip };
 }
 
 function OutfitCard({ outfit }: { outfit: Outfit }) {
@@ -85,49 +127,12 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { items, generateOutfits } = useCloset();
   const [outfits, setOutfits] = useState<Outfit[]>([]);
-  const [analysis, setAnalysis] = useState<ClosetAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
-  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMounted = useRef(true);
-
   const topsCount = items.filter(i => i.category === "tops").length;
   const bottomsCount = items.filter(i => i.category === "bottoms").length;
   const totalCombos = topsCount * bottomsCount;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-
-  async function fetchAnalysis() {
-    if (!isMounted.current) return;
-    setAnalysisLoading(true);
-    try {
-      const res = await fetch("/api/closet-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: items.map(i => ({
-            name: i.name, category: i.category,
-            subcategory: i.subcategory, color: i.color,
-          })),
-        }),
-      });
-      if (res.ok && isMounted.current) setAnalysis(await res.json());
-    } catch { /* keep previous value if offline */ }
-    finally { if (isMounted.current) setAnalysisLoading(false); }
-  }
-
-  // First load — immediate, no debounce
-  useEffect(() => {
-    isMounted.current = true;
-    fetchAnalysis();
-    return () => { isMounted.current = false; };
-  }, []);
-
-  // Re-run with debounce when closet changes after first load
-  useEffect(() => {
-    if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
-    analysisTimerRef.current = setTimeout(fetchAnalysis, 1000);
-    return () => { if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current); };
-  }, [items.length]);
+  const closetScore = useMemo(() => computeClosetScore(items), [items]);
 
   useEffect(() => {
     if (items.length > 1) setOutfits(generateOutfits("bold"));
@@ -227,10 +232,8 @@ export default function ExploreScreen() {
         >
           {[
             { icon: "zap" as const,    label: "Bold Picks", count: outfits.length || "—" },
-            { icon: "layers" as const, label: "Combos",     count: totalCombos  || "—" },
-            { icon: analysisLoading ? "loader" as const : (analysis ? "trending-up" as const : "bar-chart-2" as const),
-              label: "AI Score",
-              count: analysisLoading ? "…" : analysis ? `${analysis.score}` : "—" },
+            { icon: "layers" as const,      label: "Combos",        count: totalCombos || "—" },
+            { icon: "bar-chart-2" as const, label: "Closet Score",  count: closetScore.score },
           ].map((stat, i) => (
             <View
               key={i}
@@ -246,57 +249,40 @@ export default function ExploreScreen() {
           ))}
         </ScrollView>
 
-        {/* AI Closet Analysis — loading card only */}
-        {analysisLoading && (
-          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
-            <View style={styles.aiHeader}>
-              <View style={[styles.aiIconWrap, { backgroundColor: colors.accent + "18" }]}>
-                <Feather name="cpu" size={14} color={colors.accent} />
-              </View>
-              <Text style={[styles.aiTitle, { color: colors.foreground }]}>AI Closet Analysis</Text>
-              <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: "auto" }} />
+        {/* Closet Score card — always visible, computed locally */}
+        <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
+          {/* Score bar */}
+          <View style={styles.scoreBarWrap}>
+            <View style={[styles.scoreBarBg, { backgroundColor: colors.secondary }]}>
+              <View style={[styles.scoreBarFill, {
+                width: `${closetScore.score}%` as any,
+                backgroundColor: closetScore.score >= 70 ? "#2D6A4F" : closetScore.score >= 50 ? colors.accent : "#E05252",
+              }]} />
             </View>
+            <Text style={[styles.scoreNum, { color: colors.foreground }]}>
+              {closetScore.score}<Text style={[styles.scoreOf, { color: colors.mutedForeground }]}>/100</Text>
+            </Text>
           </View>
-        )}
 
-        {/* Missing basics + tip — shown after analysis loads */}
-        {!analysisLoading && analysis && (
-          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
-            {/* Score bar */}
-            <View style={styles.scoreBarWrap}>
-              <View style={[styles.scoreBarBg, { backgroundColor: colors.secondary }]}>
-                <View style={[styles.scoreBarFill, { width: `${analysis.score}%` as any, backgroundColor: analysis.score >= 70 ? "#2D6A4F" : analysis.score >= 50 ? colors.accent : "#E05252" }]} />
-              </View>
-              <View style={[styles.trendPill, { backgroundColor: Number(analysis.trend) >= 0 ? "#2D6A4F18" : "#E0525218" }]}>
-                <Feather name={Number(analysis.trend) >= 0 ? "trending-up" : "trending-down"} size={11} color={Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252"} />
-                <Text style={[styles.trendText, { color: Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252" }]}>
-                  {Number(analysis.trend) > 0 ? `+${analysis.trend}` : analysis.trend}
-                </Text>
+          {closetScore.missing.length > 0 && (
+            <View style={styles.missingSection}>
+              <Text style={[styles.missingLabel, { color: colors.mutedForeground }]}>BÁSICOS QUE TE FALTAN</Text>
+              <View style={styles.missingPills}>
+                {closetScore.missing.map((item, idx) => (
+                  <View key={idx} style={[styles.missingPill, { backgroundColor: "#E05252" + "14", borderColor: "#E05252" + "40" }]}>
+                    <Feather name="plus-circle" size={11} color="#E05252" />
+                    <Text style={[styles.missingPillText, { color: "#E05252" }]}>{item}</Text>
+                  </View>
+                ))}
               </View>
             </View>
+          )}
 
-            {analysis.missing.length > 0 && (
-              <View style={styles.missingSection}>
-                <Text style={[styles.missingLabel, { color: colors.mutedForeground }]}>BÁSICOS QUE TE FALTAN</Text>
-                <View style={styles.missingPills}>
-                  {analysis.missing.map((item, i) => (
-                    <View key={i} style={[styles.missingPill, { backgroundColor: "#E05252" + "14", borderColor: "#E05252" + "40" }]}>
-                      <Feather name="plus-circle" size={11} color="#E05252" />
-                      <Text style={[styles.missingPillText, { color: "#E05252" }]}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {analysis.tip ? (
-              <View style={[styles.tipRow, { backgroundColor: colors.accent + "10", borderRadius: 8 }]}>
-                <Feather name="star" size={13} color={colors.accent} />
-                <Text style={[styles.tipText, { color: colors.foreground }]}>{analysis.tip}</Text>
-              </View>
-            ) : null}
+          <View style={[styles.tipRow, { backgroundColor: colors.accent + "10", borderRadius: 8 }]}>
+            <Feather name="star" size={13} color={colors.accent} />
+            <Text style={[styles.tipText, { color: colors.foreground }]}>{closetScore.tip}</Text>
           </View>
-        )}
+        </View>
 
         {/* Outfits list */}
         {!hasCombos ? (
