@@ -133,6 +133,7 @@ export default function WardrobeScreen() {
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.subChipText,
                     { color: active ? "#fff" : colors.mutedForeground },
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: 32,
     borderWidth: 1,
   },
   subChipText: { fontSize: 12, fontFamily: "Inter_500Medium" },
