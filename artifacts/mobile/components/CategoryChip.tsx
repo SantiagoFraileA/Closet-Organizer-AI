@@ -34,6 +34,9 @@ export function CategoryChip({ label, selected, onPress }: Props) {
             color: selected ? colors.primaryForeground : colors.mutedForeground,
           },
         ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
       >
         {label}
       </Text>

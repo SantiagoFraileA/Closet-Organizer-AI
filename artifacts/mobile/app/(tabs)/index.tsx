@@ -208,9 +208,9 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "700", fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  chipRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth },
-  subRow: { height: 50, borderBottomWidth: StyleSheet.hairlineWidth },
-  chipContent: { paddingHorizontal: 16, flexDirection: "row", alignItems: "center" },
+  chipRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth },
+  subRow: { borderBottomWidth: StyleSheet.hairlineWidth },
+  chipContent: { paddingHorizontal: 12, paddingVertical: 7, flexDirection: "row", alignItems: "center" },
   subChip: {
     flexDirection: "row",
     alignItems: "center",
