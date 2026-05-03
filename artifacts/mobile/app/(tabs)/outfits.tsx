@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AIPicks } from "@/components/AIPicks";
 import { EmptyState } from "@/components/EmptyState";
 import { OutfitItemRow } from "@/components/OutfitItemRow";
-import { Outfit, SavedLook, useCloset } from "@/context/ClosetContext";
+import { Outfit, OutfitMode, SavedLook, useCloset } from "@/context/ClosetContext";
 import { useColors } from "@/hooks/useColors";
 
 const { width } = Dimensions.get("window");
@@ -231,10 +231,16 @@ function SwipeCard({
           <Text style={[styles.scoreValue, { color: colors.foreground }]}>{Math.round(outfit.styleScore * 100)}%</Text>
         </View>
         {outfitItems.map((item) => item && <OutfitItemRow key={item.id} item={item} />)}
-        {outfit.isComfortZone && (
-          <View style={[styles.badge, { backgroundColor: "#3730A3" + "22", borderRadius: 8 }]}>
-            <Feather name="zap" size={12} color="#3730A3" />
-            <Text style={[styles.badgeText, { color: "#3730A3" }]}>Comfort Zone Challenge</Text>
+        {outfit.mode === "fresh" && (
+          <View style={[styles.badge, { backgroundColor: "#C4956A22", borderRadius: 8 }]}>
+            <Feather name="shuffle" size={12} color="#C4956A" />
+            <Text style={[styles.badgeText, { color: "#C4956A" }]}>Fresh Mix</Text>
+          </View>
+        )}
+        {outfit.mode === "bold" && (
+          <View style={[styles.badge, { backgroundColor: "#E0525222", borderRadius: 8 }]}>
+            <Feather name="zap" size={12} color="#E05252" />
+            <Text style={[styles.badgeText, { color: "#E05252" }]}>Bold Look</Text>
           </View>
         )}
       </View>
@@ -248,16 +254,16 @@ export default function OutfitsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { outfits, ratings, rateOutfit, generateOutfits, items } = useCloset();
-  const [comfortZone, setComfortZone] = useState(false);
+  const [mode, setMode] = useState<OutfitMode>("everyday");
   const [deck, setDeck] = useState<Outfit[]>([]);
   const [likeCount, setLikeCount] = useState(0);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   useEffect(() => {
-    const generated = generateOutfits(comfortZone);
+    const generated = generateOutfits(mode);
     setDeck([...generated].reverse());
-  }, [comfortZone, items.length]);
+  }, [mode, items.length]);
 
   const handleLike = () => {
     if (!deck.length) return;
@@ -276,7 +282,7 @@ export default function OutfitsScreen() {
 
   const handleRefresh = () => {
     Haptics.selectionAsync();
-    setDeck([...generateOutfits(comfortZone)].reverse());
+    setDeck([...generateOutfits(mode)].reverse());
     setLikeCount(0);
   };
 
@@ -316,16 +322,37 @@ export default function OutfitsScreen() {
         {/* My Looks strip */}
         <LooksStrip />
 
-        {/* Comfort Zone Toggle */}
-        <Pressable
-          onPress={() => { setComfortZone((v) => !v); Haptics.selectionAsync(); }}
-          style={[styles.modeToggle, { backgroundColor: comfortZone ? "#3730A3" : colors.secondary, borderRadius: 12, marginHorizontal: 20, marginTop: 14 }]}
-        >
-          <Feather name="zap" size={16} color={comfortZone ? "#FFFFFF" : colors.mutedForeground} />
-          <Text style={[styles.modeText, { color: comfortZone ? "#FFFFFF" : colors.mutedForeground }]}>
-            {comfortZone ? "Comfort Zone Mode ON" : "Exit Comfort Zone"}
-          </Text>
-        </Pressable>
+        {/* Mode selector — 3 tabs */}
+        <View style={[styles.modePicker, { backgroundColor: colors.secondary, borderRadius: 14, marginHorizontal: 20, marginTop: 14 }]}>
+          {([ 
+            { key: "everyday", label: "Everyday", icon: "sun" as const, color: colors.foreground },
+            { key: "fresh",    label: "Fresh Mix", icon: "shuffle" as const, color: "#C4956A" },
+            { key: "bold",     label: "Bold",      icon: "zap" as const,     color: "#E05252" },
+          ] as { key: OutfitMode; label: string; icon: keyof typeof Feather.glyphMap; color: string }[]).map((m) => {
+            const active = mode === m.key;
+            return (
+              <Pressable
+                key={m.key}
+                onPress={() => { setMode(m.key); setLikeCount(0); Haptics.selectionAsync(); }}
+                style={[
+                  styles.modeTab,
+                  active && { backgroundColor: colors.background, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3, borderRadius: 11 },
+                ]}
+              >
+                <Feather name={m.icon} size={13} color={active ? m.color : colors.mutedForeground} />
+                <Text style={[styles.modeTabText, { color: active ? m.color : colors.mutedForeground, fontFamily: active ? "Inter_700Bold" : "Inter_400Regular" }]}>
+                  {m.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {/* Mode description */}
+        <Text style={[styles.modeDesc, { color: colors.mutedForeground }]}>
+          {mode === "everyday" && "Combinaciones que siempre funcionan"}
+          {mode === "fresh" && "Mezclas nuevas para salir de la rutina"}
+          {mode === "bold" && "Looks atrevidos que llaman la atención 🔥"}
+        </Text>
 
         {/* Card stack */}
         {!canShow ? (
@@ -375,8 +402,10 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   likeCounter: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5 },
   likeCountText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  modeToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 14, minHeight: 44 },
-  modeText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  modePicker: { flexDirection: "row", padding: 4, gap: 4, minHeight: 48 },
+  modeTab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 10 },
+  modeTabText: { fontSize: 13 },
+  modeDesc: { fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 6, marginHorizontal: 20 },
   stackArea: { height: 420, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, marginTop: 16 },
   card: { position: "absolute", width: width - 40, borderWidth: 1, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4 },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", zIndex: 20 },

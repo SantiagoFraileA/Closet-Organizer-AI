@@ -115,6 +115,7 @@ export default function AddItemScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     addItem({
       imageUri,
+      imageThumb: null,
       name: name.trim(),
       category,
       color: selectedColor.label,

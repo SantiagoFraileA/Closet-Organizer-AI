@@ -9,6 +9,7 @@ import React, {
 import { api, type AuthUser } from "../utils/api";
 
 export type ClothingCategory = "tops" | "bottoms" | "shoes" | "accessories";
+export type OutfitMode = "everyday" | "fresh" | "bold";
 
 export interface ClothingItem {
   id: string;
@@ -35,7 +36,7 @@ export interface Outfit {
   id: string;
   itemIds: string[];
   styleScore: number;
-  isComfortZone: boolean;
+  mode: OutfitMode;
 }
 
 export interface Rating {
@@ -66,7 +67,7 @@ interface ClosetContextValue {
   addLook: (look: Omit<SavedLook, "id" | "createdAt">) => void;
   removeLook: (id: string) => void;
   rateOutfit: (outfitId: string, rating: "like" | "dislike") => void;
-  generateOutfits: (comfortZone?: boolean) => Outfit[];
+  generateOutfits: (mode?: OutfitMode) => Outfit[];
   completeOnboarding: (profile: Omit<UserProfile, "id"> & { password: string }) => Promise<void>;
   signIn: (email: string, password: string) => Promise<"ok" | "wrong_password" | "not_found">;
   setProfileName: (name: string) => void;
@@ -147,7 +148,7 @@ function colorHarmony(h1: string, h2: string): number {
   return 0.72;
 }
 
-function buildOutfits(items: ClothingItem[], comfortZone: boolean): Outfit[] {
+function buildOutfits(items: ClothingItem[], mode: OutfitMode): Outfit[] {
   const tops = items.filter((i) => i.category === "tops");
   const bottoms = items.filter((i) => i.category === "bottoms");
   const shoes = items.filter((i) => i.category === "shoes");
@@ -155,26 +156,44 @@ function buildOutfits(items: ClothingItem[], comfortZone: boolean): Outfit[] {
 
   if (!tops.length || !bottoms.length) return [];
 
+  const neutrals = ["#F5F0E8","#F0EFEB","#2D2926","#1C1917","#FFFFFF","#C4956A","#B8956A"];
+
   const results: Outfit[] = [];
 
   tops.forEach((top) => {
     bottoms.forEach((bottom) => {
-      const score = colorHarmony(top.colorHex, bottom.colorHex);
+      const harmony = colorHarmony(top.colorHex, bottom.colorHex);
       const shoe = shoes[Math.floor(Math.random() * Math.max(1, shoes.length))];
       const acc = accessories[Math.floor(Math.random() * Math.max(1, accessories.length))];
       const itemIds = [top.id, bottom.id];
       if (shoe) itemIds.push(shoe.id);
       if (acc) itemIds.push(acc.id);
 
-      const styleScore = comfortZone
-        ? Math.round((Math.random() * 0.25 + 0.55) * 100) / 100
-        : Math.round(score * 100) / 100;
+      let styleScore: number;
+      if (mode === "everyday") {
+        styleScore = Math.round(harmony * 100) / 100;
+      } else if (mode === "fresh") {
+        styleScore = Math.round((Math.random() * 0.2 + 0.72) * 100) / 100;
+      } else {
+        // bold: prefer contrasting non-neutral combos
+        const isContrast = !neutrals.includes(top.colorHex) && !neutrals.includes(bottom.colorHex) && top.colorHex !== bottom.colorHex;
+        styleScore = Math.round((isContrast ? Math.random() * 0.15 + 0.84 : Math.random() * 0.2 + 0.68) * 100) / 100;
+      }
 
-      results.push({ id: makeId(), itemIds, styleScore, isComfortZone: comfortZone });
+      results.push({ id: makeId(), itemIds, styleScore, mode });
     });
   });
 
-  return results.sort(() => Math.random() - 0.5).slice(0, comfortZone ? 6 : 10);
+  if (mode === "everyday") {
+    return results.sort((a, b) => b.styleScore - a.styleScore).slice(0, 10);
+  }
+  if (mode === "fresh") {
+    return results.sort(() => Math.random() - 0.5).slice(0, 10);
+  }
+  // bold: put contrasting ones first
+  return results
+    .sort((a, b) => b.styleScore - a.styleScore)
+    .slice(0, 8);
 }
 
 function userFromAuth(u: AuthUser): UserProfile {
@@ -215,7 +234,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         setItems(loadedItems);
         if (ratingsStr) setRatings(JSON.parse(ratingsStr));
         if (looksStr) setSavedLooks(JSON.parse(looksStr));
-        setOutfits(buildOutfits(loadedItems, false));
+        setOutfits(buildOutfits(loadedItems, "everyday"));
 
         if (tokenStr) {
           try {
@@ -230,7 +249,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         setItems(SAMPLE_ITEMS);
-        setOutfits(buildOutfits(SAMPLE_ITEMS, false));
+        setOutfits(buildOutfits(SAMPLE_ITEMS, "everyday"));
       } finally {
         setLoaded(true);
       }
@@ -242,7 +261,7 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => {
       const next = [item, ...prev];
       AsyncStorage.setItem("@cf_items", JSON.stringify(next));
-      setOutfits(buildOutfits(next, false));
+      setOutfits(buildOutfits(next, "everyday"));
       return next;
     });
   }, []);
@@ -282,8 +301,8 @@ export function ClosetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const generateOutfits = useCallback(
-    (comfortZone = false): Outfit[] => {
-      const generated = buildOutfits(items, comfortZone);
+    (mode: OutfitMode = "everyday"): Outfit[] => {
+      const generated = buildOutfits(items, mode);
       setOutfits(generated);
       return generated;
     },

@@ -82,13 +82,13 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (items.length > 1) {
-      setOutfits(generateOutfits(true));
+      setOutfits(generateOutfits("bold"));
     }
   }, [items.length]);
 
   const handleRefresh = () => {
     Haptics.selectionAsync();
-    setOutfits(generateOutfits(true));
+    setOutfits(generateOutfits("bold"));
   };
 
   const hasCombos =
@@ -179,7 +179,7 @@ export default function ExploreScreen() {
           contentContainerStyle={styles.insightRow}
         >
           {[
-            { icon: "shuffle" as const, label: "Color Play", count: outfits.filter(o => o.isComfortZone).length },
+            { icon: "shuffle" as const, label: "Color Play", count: outfits.filter(o => o.mode === "bold").length },
             { icon: "layers" as const, label: "New Combos", count: Math.floor(outfits.length * 1.3) },
             { icon: "trending-up" as const, label: "Style Score", count: "Up 12%" },
           ].map((stat, i) => (
