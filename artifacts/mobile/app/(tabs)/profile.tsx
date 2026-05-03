@@ -397,6 +397,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    paddingVertical: 10,
+    minHeight: 44,
   },
   name: {
     fontSize: 22,

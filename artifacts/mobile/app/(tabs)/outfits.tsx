@@ -299,7 +299,7 @@ export default function OutfitsScreen() {
               <Text style={[styles.likeCountText, { color: "#C4956A" }]}>{likeCount}</Text>
             </View>
           )}
-          <Pressable onPress={handleRefresh} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+          <Pressable onPress={handleRefresh} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, width: 44, height: 44, alignItems: "center", justifyContent: "center" })}>
             <Feather name="refresh-cw" size={20} color={colors.mutedForeground} />
           </Pressable>
         </View>
@@ -371,11 +371,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },
   title: { fontSize: 28, fontWeight: "700", fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
-  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 18 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   likeCounter: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5 },
   likeCountText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  modeToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  modeToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 14, minHeight: 44 },
   modeText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   stackArea: { height: 420, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, marginTop: 16 },
   card: { position: "absolute", width: width - 40, borderWidth: 1, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4 },
@@ -397,8 +397,8 @@ const styles = StyleSheet.create({
 });
 
 const ls = StyleSheet.create({
-  container: { paddingTop: 16, borderBottomWidth: StyleSheet.hairlineWidth },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14 },
+  container: { borderBottomWidth: StyleSheet.hairlineWidth },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14, minHeight: 44 },
   titleLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold" },
   badge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },

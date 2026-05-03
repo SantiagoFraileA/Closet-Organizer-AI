@@ -243,13 +243,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
+    lineHeight: 18,
   },
   refreshBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
