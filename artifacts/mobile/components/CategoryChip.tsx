@@ -24,7 +24,6 @@ export function CategoryChip({ label, selected, onPress }: Props) {
         styles.chip,
         {
           backgroundColor: selected ? colors.foreground : colors.secondary,
-          borderRadius: 20,
         },
       ]}
     >
@@ -44,8 +43,10 @@ export function CategoryChip({ label, selected, onPress }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
-    paddingVertical: 8,
+    height: 34,
+    borderRadius: 17,
     paddingHorizontal: 16,
+    marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
   },
