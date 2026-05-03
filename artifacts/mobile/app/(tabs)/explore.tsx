@@ -86,8 +86,9 @@ export default function ExploreScreen() {
   const { items, generateOutfits } = useCloset();
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [analysis, setAnalysis] = useState<ClosetAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
   const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(true);
 
   const topsCount = items.filter(i => i.category === "tops").length;
   const bottomsCount = items.filter(i => i.category === "bottoms").length;
@@ -95,28 +96,36 @@ export default function ExploreScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
-  // Debounced AI analysis — re-runs when closet changes, with 1.5s delay
+  async function fetchAnalysis() {
+    if (!isMounted.current) return;
+    setAnalysisLoading(true);
+    try {
+      const res = await fetch("/api/closet-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map(i => ({
+            name: i.name, category: i.category,
+            subcategory: i.subcategory, color: i.color,
+          })),
+        }),
+      });
+      if (res.ok && isMounted.current) setAnalysis(await res.json());
+    } catch { /* keep previous value if offline */ }
+    finally { if (isMounted.current) setAnalysisLoading(false); }
+  }
+
+  // First load — immediate, no debounce
+  useEffect(() => {
+    isMounted.current = true;
+    fetchAnalysis();
+    return () => { isMounted.current = false; };
+  }, []);
+
+  // Re-run with debounce when closet changes after first load
   useEffect(() => {
     if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
-    analysisTimerRef.current = setTimeout(async () => {
-      setAnalysisLoading(true);
-      try {
-        const res = await fetch("/api/closet-analysis", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: items.map(i => ({
-              name: i.name,
-              category: i.category,
-              subcategory: i.subcategory,
-              color: i.color,
-            })),
-          }),
-        });
-        if (res.ok) setAnalysis(await res.json());
-      } catch { /* silent — show nothing if offline */ }
-      finally { setAnalysisLoading(false); }
-    }, 1500);
+    analysisTimerRef.current = setTimeout(fetchAnalysis, 1000);
     return () => { if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current); };
   }, [items.length]);
 
@@ -237,9 +246,8 @@ export default function ExploreScreen() {
           ))}
         </ScrollView>
 
-        {/* AI Closet Analysis card */}
-        {(analysis || analysisLoading) && (
-          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
+        {/* AI Closet Analysis card — always visible */}
+        <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
             {/* Header */}
             <View style={styles.aiHeader}>
               <View style={[styles.aiIconWrap, { backgroundColor: colors.accent + "18" }]}>
@@ -292,7 +300,6 @@ export default function ExploreScreen() {
               </>
             )}
           </View>
-        )}
 
         {/* Outfits list */}
         {!hasCombos ? (
