@@ -246,60 +246,57 @@ export default function ExploreScreen() {
           ))}
         </ScrollView>
 
-        {/* AI Closet Analysis card — always visible */}
-        <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
-            {/* Header */}
+        {/* AI Closet Analysis — loading card only */}
+        {analysisLoading && (
+          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
             <View style={styles.aiHeader}>
               <View style={[styles.aiIconWrap, { backgroundColor: colors.accent + "18" }]}>
                 <Feather name="cpu" size={14} color={colors.accent} />
               </View>
               <Text style={[styles.aiTitle, { color: colors.foreground }]}>AI Closet Analysis</Text>
-              {analysisLoading && <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: "auto" }} />}
-              {!analysisLoading && analysis && (
-                <View style={[styles.trendPill, { backgroundColor: Number(analysis.trend) >= 0 ? "#2D6A4F18" : "#E0525218", marginLeft: "auto" }]}>
-                  <Feather name={Number(analysis.trend) >= 0 ? "trending-up" : "trending-down"} size={11} color={Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252"} />
-                  <Text style={[styles.trendText, { color: Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252" }]}>
-                    {Number(analysis.trend) > 0 ? `+${analysis.trend}` : analysis.trend} vs ideal
-                  </Text>
-                </View>
-              )}
+              <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: "auto" }} />
+            </View>
+          </View>
+        )}
+
+        {/* Missing basics + tip — shown after analysis loads */}
+        {!analysisLoading && analysis && (
+          <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius, marginHorizontal: 20, marginBottom: 8 }]}>
+            {/* Score bar */}
+            <View style={styles.scoreBarWrap}>
+              <View style={[styles.scoreBarBg, { backgroundColor: colors.secondary }]}>
+                <View style={[styles.scoreBarFill, { width: `${analysis.score}%` as any, backgroundColor: analysis.score >= 70 ? "#2D6A4F" : analysis.score >= 50 ? colors.accent : "#E05252" }]} />
+              </View>
+              <View style={[styles.trendPill, { backgroundColor: Number(analysis.trend) >= 0 ? "#2D6A4F18" : "#E0525218" }]}>
+                <Feather name={Number(analysis.trend) >= 0 ? "trending-up" : "trending-down"} size={11} color={Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252"} />
+                <Text style={[styles.trendText, { color: Number(analysis.trend) >= 0 ? "#2D6A4F" : "#E05252" }]}>
+                  {Number(analysis.trend) > 0 ? `+${analysis.trend}` : analysis.trend}
+                </Text>
+              </View>
             </View>
 
-            {analysis && !analysisLoading && (
-              <>
-                {/* Score bar */}
-                <View style={styles.scoreBarWrap}>
-                  <View style={[styles.scoreBarBg, { backgroundColor: colors.secondary }]}>
-                    <View style={[styles.scoreBarFill, { width: `${analysis.score}%` as any, backgroundColor: analysis.score >= 70 ? "#2D6A4F" : analysis.score >= 50 ? colors.accent : "#E05252" }]} />
-                  </View>
-                  <Text style={[styles.scoreNum, { color: colors.foreground }]}>{analysis.score}<Text style={[styles.scoreOf, { color: colors.mutedForeground }]}>/100</Text></Text>
-                </View>
-
-                {/* Missing basics */}
-                {analysis.missing.length > 0 && (
-                  <View style={styles.missingSection}>
-                    <Text style={[styles.missingLabel, { color: colors.mutedForeground }]}>BÁSICOS QUE TE FALTAN</Text>
-                    <View style={styles.missingPills}>
-                      {analysis.missing.map((item, i) => (
-                        <View key={i} style={[styles.missingPill, { backgroundColor: "#E05252" + "14", borderColor: "#E05252" + "40" }]}>
-                          <Feather name="plus-circle" size={11} color="#E05252" />
-                          <Text style={[styles.missingPillText, { color: "#E05252" }]}>{item}</Text>
-                        </View>
-                      ))}
+            {analysis.missing.length > 0 && (
+              <View style={styles.missingSection}>
+                <Text style={[styles.missingLabel, { color: colors.mutedForeground }]}>BÁSICOS QUE TE FALTAN</Text>
+                <View style={styles.missingPills}>
+                  {analysis.missing.map((item, i) => (
+                    <View key={i} style={[styles.missingPill, { backgroundColor: "#E05252" + "14", borderColor: "#E05252" + "40" }]}>
+                      <Feather name="plus-circle" size={11} color="#E05252" />
+                      <Text style={[styles.missingPillText, { color: "#E05252" }]}>{item}</Text>
                     </View>
-                  </View>
-                )}
-
-                {/* Tip */}
-                {analysis.tip ? (
-                  <View style={[styles.tipRow, { backgroundColor: colors.accent + "10", borderRadius: 8 }]}>
-                    <Feather name="star" size={13} color={colors.accent} />
-                    <Text style={[styles.tipText, { color: colors.foreground }]}>{analysis.tip}</Text>
-                  </View>
-                ) : null}
-              </>
+                  ))}
+                </View>
+              </View>
             )}
+
+            {analysis.tip ? (
+              <View style={[styles.tipRow, { backgroundColor: colors.accent + "10", borderRadius: 8 }]}>
+                <Feather name="star" size={13} color={colors.accent} />
+                <Text style={[styles.tipText, { color: colors.foreground }]}>{analysis.tip}</Text>
+              </View>
+            ) : null}
           </View>
+        )}
 
         {/* Outfits list */}
         {!hasCombos ? (
