@@ -51,11 +51,13 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    marginHorizontal: 3,
   },
   label: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
     textAlign: "center",
+    paddingHorizontal: 2,
   },
 });
